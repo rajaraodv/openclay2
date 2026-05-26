@@ -179,3 +179,22 @@ export interface ViewDef {
   sorts: SortDef[];
   hiddenColumns: string[];
 }
+
+// ── Column reference (for chip-based value editor) ──────────────────
+
+export interface ColumnReference {
+  columnId: string;
+  columnName: string;
+  /** Sub-field for enrichment columns (e.g., "url", "name", "slug") */
+  field?: string;
+  /** What to show in the chip (e.g., "url" or "Domain") */
+  displayLabel: string;
+  /** Icon for the value type (e.g., "🔗", "T", "#") */
+  typeIcon: string;
+}
+
+// ── Editor segment (text + chip mixed content) ──────────────────────
+
+export type EditorSegment =
+  | { type: "text"; value: string }
+  | { type: "ref"; ref: ColumnReference };

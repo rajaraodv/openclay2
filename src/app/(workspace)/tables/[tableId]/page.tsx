@@ -24,6 +24,7 @@ import type {
 } from "@/types/table";
 import { CellStatus, ColumnBehaviorType } from "@/types/table";
 import { ColumnHeaderMenu } from "@/components/table/column-header-menu";
+import { ColumnConfigEditor } from "@/components/table/column-config-editor";
 import { ColumnDataType } from "@/types/table";
 import { X, Play, Copy, ExternalLink } from "lucide-react";
 
@@ -805,48 +806,21 @@ export default function TablePage() {
               )}
 
             {rightPanel.mode === "column-config" && selectedCol && (
-              <div className="flex h-full flex-col bg-zinc-900">
-                <div className="flex items-center justify-between border-b border-zinc-800 px-4 py-3">
-                  <span className="text-sm font-semibold text-zinc-100">
-                    Configure: {selectedCol.name}
-                  </span>
-                  <button
-                    onClick={handleCloseRightPanel}
-                    className="rounded-md p-1 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"
-                  >
-                    <X className="size-4" />
-                  </button>
-                </div>
-                <div className="flex-1 overflow-y-auto p-4 text-xs text-zinc-400">
-                  <p className="mb-2">
-                    Column type:{" "}
-                    <span className="text-zinc-200">{selectedCol.columnType}</span>
-                  </p>
-                  <p className="mb-2">
-                    Data type:{" "}
-                    <span className="text-zinc-200">{selectedCol.dataType}</span>
-                  </p>
-                  {selectedCol.autoRun !== undefined && (
-                    <p className="mb-2">
-                      Auto-run:{" "}
-                      <span className="text-zinc-200">
-                        {selectedCol.autoRun ? "On" : "Off"}
-                      </span>
-                    </p>
-                  )}
-                  <p className="mt-4 text-zinc-600">
-                    Use the full column config panel (slide-over) for detailed configuration.
-                  </p>
-                  <button
-                    onClick={() => {
-                      setConfigPanelOpen(true);
-                    }}
-                    className="mt-2 rounded-md bg-indigo-600/20 px-3 py-1.5 text-xs font-medium text-indigo-400 hover:bg-indigo-600/30"
-                  >
-                    Open full editor
-                  </button>
-                </div>
-              </div>
+              <ColumnConfigEditor
+                column={selectedCol}
+                allColumns={displayColumns}
+                rows={rows}
+                onSave={(columnId, updates) => {
+                  setLocalColumns((prev) =>
+                    prev.map((c) => (c.id === columnId ? { ...c, ...updates } : c))
+                  );
+                  setSelectedColumn((prev) => prev ? { ...prev, ...updates } : prev);
+                }}
+                onDelete={(columnId) => {
+                  handleColumnDelete(columnId);
+                }}
+                onClose={handleCloseRightPanel}
+              />
             )}
           </div>
         )}

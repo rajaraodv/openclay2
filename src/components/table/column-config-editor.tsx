@@ -34,10 +34,15 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
-import type { ColumnDef, ColumnValueSource } from "@/types/table";
+import type {
+  ColumnDef,
+  ColumnValueSource,
+  RowData,
+  ColumnReference,
+  EditorSegment,
+} from "@/types/table";
 import {
   ColumnBehaviorType,
   ColumnDataType,
@@ -120,7 +125,6 @@ function getEnrichmentTemplate(col: ColumnDef) {
   if (cfg && typeof cfg === "object" && cfg.templateId) {
     return ENRICHMENT_TEMPLATES.find((t) => t.id === cfg.templateId) ?? null;
   }
-  // Try to match by column name
   return ENRICHMENT_TEMPLATES.find(
     (t) => col.name.toLowerCase().includes(t.name.toLowerCase())
   ) ?? null;
@@ -137,64 +141,59 @@ function getEnrichmentFieldCount(col: ColumnDef): number {
   return 20;
 }
 
-/** Extract enrichment sub-field names. */
-function getEnrichmentSubFields(col: ColumnDef): string[] {
-  const cfg = col.config as Record<string, unknown>;
-  if (cfg && typeof cfg === "object") {
-    if (Array.isArray(cfg.fields)) return cfg.fields as string[];
-    if (cfg.schema && typeof cfg.schema === "object")
-      return Object.keys(cfg.schema as Record<string, unknown>);
-  }
-  return [
-    "name", "domain", "description", "industry", "size", "founded",
-    "country", "locality", "website", "logo_url", "type", "slug",
-    "org_id", "company_id", "linkedin_url", "locations",
-    "technologies", "last_refresh",
-  ];
+/** Convert segments to a template string (for saving). */
+function segmentsToTemplate(segments: EditorSegment[]): string {
+  return segments
+    .map((seg) => {
+      if (seg.type === "text") return seg.value;
+      const ref = seg.ref;
+      return ref.field
+        ? `{{${ref.columnName}.${ref.field}}}`
+        : `{{${ref.columnName}}}`;
+    })
+    .join("");
+}
+
+/** Convert a valueSource to initial segments. */
+function valueSourceToSegments(
+  valueSource: ColumnValueSource | undefined,
+  allColumns: ColumnDef[]
+): EditorSegment[] {
+  if (!valueSource || !valueSource.sourceColumnId) return [];
+  const sourceCol = allColumns.find(
+    (c) => c.id === valueSource.sourceColumnId
+  );
+  if (!sourceCol) return [];
+
+  const ref: ColumnReference = {
+    columnId: sourceCol.id,
+    columnName: sourceCol.name,
+    field: valueSource.sourceField,
+    displayLabel: valueSource.sourceField ?? sourceCol.name,
+    typeIcon: dataTypeIconString(sourceCol.dataType),
+  };
+
+  return [{ type: "ref", ref }];
 }
 
 // ── ColumnRefChip ───────────────────────────────────────────────────
 
 interface ColumnRefChipProps {
-  sourceColumn: ColumnDef | undefined;
-  sourceField?: string;
-  isSelected?: boolean;
+  ref_: ColumnReference;
   onRemove: () => void;
-  onClick?: () => void;
 }
 
-function ColumnRefChip({
-  sourceColumn,
-  sourceField,
-  isSelected,
-  onRemove,
-  onClick,
-}: ColumnRefChipProps) {
-  const columnName = sourceColumn?.name ?? "Unknown";
-  const isEnrichment = sourceColumn?.columnType === ColumnBehaviorType.Enrichment;
-  const typeIcon = sourceColumn
-    ? dataTypeIconString(sourceColumn.dataType)
-    : "T";
-
-  // Build display label: "ColumnName" or "ColumnName.field"
-  const displayLabel = sourceField
-    ? `${columnName}.${sourceField}`
-    : columnName;
-
+function ColumnRefChip({ ref_, onRemove }: ColumnRefChipProps) {
   return (
     <span
-      className={cn(
-        "group inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium transition-colors cursor-pointer",
-        isSelected
-          ? "border-indigo-500/50 bg-indigo-500/10 text-indigo-300"
-          : "border-zinc-700 bg-zinc-800 text-zinc-300 hover:border-zinc-600"
-      )}
-      onClick={onClick}
+      className="inline-flex items-center gap-1 rounded-md border border-zinc-700 bg-zinc-800 px-1.5 py-0.5 text-xs font-medium text-zinc-300 align-middle"
+      contentEditable={false}
     >
       {/* Remove button */}
       <button
         type="button"
         onClick={(e) => {
+          e.preventDefault();
           e.stopPropagation();
           onRemove();
         }}
@@ -209,24 +208,212 @@ function ColumnRefChip({
       </span>
 
       {/* Type icon */}
-      <span
-        className={cn(
-          "flex size-4 shrink-0 items-center justify-center rounded text-[9px] font-bold",
-          isEnrichment
-            ? "bg-purple-500/20 text-purple-400"
-            : "bg-zinc-700 text-zinc-400"
-        )}
-      >
-        {isEnrichment ? (
-          <Database className="size-2.5" />
-        ) : (
-          typeIcon
-        )}
+      <span className="flex size-4 shrink-0 items-center justify-center rounded bg-zinc-700 text-[9px] font-bold text-zinc-400">
+        {ref_.typeIcon}
       </span>
 
       {/* Label */}
-      <span className="truncate max-w-[200px]">{displayLabel}</span>
+      <span className="truncate max-w-[160px]">{ref_.displayLabel}</span>
     </span>
+  );
+}
+
+// ── ChipEditor ──────────────────────────────────────────────────────
+// A rich editor that combines free text with reference chips.
+
+interface ChipEditorProps {
+  segments: EditorSegment[];
+  onChange: (segments: EditorSegment[]) => void;
+  onSlashTrigger: (rect: { top: number; left: number; width: number }) => void;
+  placeholder?: string;
+}
+
+function ChipEditor({
+  segments,
+  onChange,
+  onSlashTrigger,
+  placeholder,
+}: ChipEditorProps) {
+  const editorRef = useRef<HTMLDivElement>(null);
+  const [isFocused, setIsFocused] = useState(false);
+
+  const isEmpty = segments.length === 0 || (
+    segments.length === 1 &&
+    segments[0].type === "text" &&
+    !segments[0].value
+  );
+
+  const handleRemoveChip = useCallback(
+    (index: number) => {
+      const newSegments = [...segments];
+      newSegments.splice(index, 1);
+      // Merge adjacent text segments
+      const merged: EditorSegment[] = [];
+      for (const seg of newSegments) {
+        const last = merged[merged.length - 1];
+        if (seg.type === "text" && last && last.type === "text") {
+          last.value += seg.value;
+        } else {
+          merged.push({ ...seg });
+        }
+      }
+      onChange(merged.length > 0 ? merged : []);
+    },
+    [segments, onChange]
+  );
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLDivElement>) => {
+      if (e.key === "/") {
+        e.preventDefault();
+        const el = editorRef.current;
+        if (el) {
+          const rect = el.getBoundingClientRect();
+          onSlashTrigger({
+            top: rect.bottom + 4,
+            left: rect.left,
+            width: rect.width,
+          });
+        }
+      }
+
+      if (e.key === "Backspace") {
+        // If editor is empty or only whitespace, remove last chip
+        if (isEmpty) {
+          e.preventDefault();
+          return;
+        }
+
+        // Check if we need to remove the last chip
+        const sel = window.getSelection();
+        if (sel && sel.isCollapsed) {
+          const el = editorRef.current;
+          if (!el) return;
+
+          // If cursor is at the beginning of a text node right after a chip, remove the chip
+          const range = sel.getRangeAt(0);
+          if (range.startOffset === 0) {
+            // Find the previous sibling which might be a chip
+            const node = range.startContainer;
+            const parent = node.parentElement;
+            if (parent) {
+              const prevSibling = node === parent ? null : (node as Element).previousSibling;
+              if (prevSibling && (prevSibling as Element).getAttribute?.("data-chip-index")) {
+                const chipIdx = parseInt(
+                  (prevSibling as Element).getAttribute("data-chip-index") ?? "-1",
+                  10
+                );
+                if (chipIdx >= 0) {
+                  e.preventDefault();
+                  handleRemoveChip(chipIdx);
+                  return;
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    [isEmpty, onSlashTrigger, handleRemoveChip]
+  );
+
+  // Sync the editor content from segments (one-way binding for chips)
+  // We use a simple approach: render chips inline with text spans
+  const handleInput = useCallback(() => {
+    const el = editorRef.current;
+    if (!el) return;
+
+    // Reconstruct segments from the DOM content
+    const newSegments: EditorSegment[] = [];
+    const children = el.childNodes;
+
+    children.forEach((node) => {
+      if (node.nodeType === Node.TEXT_NODE) {
+        const text = node.textContent ?? "";
+        if (text) {
+          newSegments.push({ type: "text", value: text });
+        }
+      } else if (node.nodeType === Node.ELEMENT_NODE) {
+        const element = node as Element;
+        const chipIndex = element.getAttribute("data-chip-index");
+        if (chipIndex !== null) {
+          // This is a chip - keep the original ref
+          const idx = parseInt(chipIndex, 10);
+          const origSegment = segments[idx];
+          if (origSegment && origSegment.type === "ref") {
+            newSegments.push(origSegment);
+          }
+        } else {
+          // Some other element - extract text
+          const text = element.textContent ?? "";
+          if (text) {
+            newSegments.push({ type: "text", value: text });
+          }
+        }
+      }
+    });
+
+    // Merge adjacent text segments
+    const merged: EditorSegment[] = [];
+    for (const seg of newSegments) {
+      const last = merged[merged.length - 1];
+      if (seg.type === "text" && last && last.type === "text") {
+        last.value += seg.value;
+      } else {
+        merged.push(seg);
+      }
+    }
+
+    onChange(merged);
+  }, [segments, onChange]);
+
+  return (
+    <div className="relative">
+      <div
+        ref={editorRef}
+        contentEditable
+        suppressContentEditableWarning
+        onKeyDown={handleKeyDown}
+        onInput={handleInput}
+        onFocus={() => setIsFocused(true)}
+        onBlur={() => setIsFocused(false)}
+        className={cn(
+          "flex min-h-[72px] flex-wrap items-start gap-1 rounded-md border p-2.5 text-xs text-zinc-200 outline-none transition-colors",
+          "border-zinc-700 bg-zinc-900/50",
+          isFocused && "ring-1 ring-indigo-500/50 border-indigo-500/30"
+        )}
+      >
+        {isEmpty && !isFocused && (
+          <span className="pointer-events-none text-zinc-600 italic select-none">
+            {placeholder ?? "No reference configured"}
+          </span>
+        )}
+        {segments.map((seg, i) => {
+          if (seg.type === "text") {
+            return (
+              <React.Fragment key={`text-${i}`}>{seg.value}</React.Fragment>
+            );
+          }
+          return (
+            <span key={`chip-${i}`} data-chip-index={i} contentEditable={false}>
+              <ColumnRefChip
+                ref_={seg.ref}
+                onRemove={() => handleRemoveChip(i)}
+              />
+            </span>
+          );
+        })}
+      </div>
+
+      {/* Gear icon */}
+      <button
+        type="button"
+        className="absolute right-2 top-2 rounded-md p-1 text-zinc-600 transition-colors hover:bg-zinc-800 hover:text-zinc-400"
+        title="Advanced settings"
+      >
+        <Settings className="size-3.5" />
+      </button>
+    </div>
   );
 }
 
@@ -235,8 +422,10 @@ function ColumnRefChip({
 export interface ColumnConfigEditorProps {
   column: ColumnDef;
   allColumns: ColumnDef[];
-  onSave: (config: Partial<ColumnDef>) => void;
-  onDelete: () => void;
+  rows: RowData[];
+  onSave: (columnId: string, config: Partial<ColumnDef>) => void;
+  onDelete: (columnId: string) => void;
+  onClose?: () => void;
 }
 
 // ── Component ───────────────────────────────────────────────────────
@@ -244,17 +433,18 @@ export interface ColumnConfigEditorProps {
 export function ColumnConfigEditor({
   column,
   allColumns,
+  rows,
   onSave,
   onDelete,
+  onClose,
 }: ColumnConfigEditorProps) {
   // ── Local state ─────────────────────────────────────────────────
   const [name, setName] = useState(column.name);
   const [isEditingName, setIsEditingName] = useState(false);
   const [dataType, setDataType] = useState(column.dataType);
-  const [valueSource, setValueSource] = useState<ColumnValueSource | undefined>(
-    column.valueSource
+  const [segments, setSegments] = useState<EditorSegment[]>(() =>
+    valueSourceToSegments(column.valueSource, allColumns)
   );
-  const [selectedChipIndex, setSelectedChipIndex] = useState<number | null>(null);
 
   // Formula state
   const [formulaValue, setFormulaValue] = useState(() => {
@@ -302,16 +492,18 @@ export function ColumnConfigEditor({
 
   // Ref picker
   const [showRefPicker, setShowRefPicker] = useState(false);
-  const [refPickerPos, setRefPickerPos] = useState({ top: 0, left: 0 });
-  const refInputAreaRef = useRef<HTMLDivElement>(null);
+  const [refPickerTriggerRect, setRefPickerTriggerRect] = useState({
+    top: 0,
+    left: 0,
+    width: 300,
+  });
   const nameInputRef = useRef<HTMLInputElement>(null);
 
   // Sync state when column prop changes
   useEffect(() => {
     setName(column.name);
     setDataType(column.dataType);
-    setValueSource(column.valueSource);
-    setSelectedChipIndex(null);
+    setSegments(valueSourceToSegments(column.valueSource, allColumns));
     if (
       column.columnType === ColumnBehaviorType.Formula &&
       column.config &&
@@ -329,7 +521,7 @@ export function ColumnConfigEditor({
       setAiModel(cfg.model);
       setAiContextColumns(cfg.contextColumns);
     }
-  }, [column]);
+  }, [column, allColumns]);
 
   // Other columns (exclude self)
   const otherColumns = useMemo(
@@ -342,7 +534,7 @@ export function ColumnConfigEditor({
   const handleNameSave = useCallback(() => {
     setIsEditingName(false);
     if (name !== column.name && name.trim()) {
-      onSave({ name: name.trim() });
+      onSave(column.id, { name: name.trim() });
     }
   }, [name, column.name, onSave]);
 
@@ -350,71 +542,64 @@ export function ColumnConfigEditor({
     (val: ColumnDataType | null) => {
       if (!val) return;
       setDataType(val);
-      onSave({ dataType: val });
+      onSave(column.id, { dataType: val });
     },
     [onSave]
   );
 
-  // ── Reference management ──────────────────────────────────────
+  // ── Segment / chip management ────────────────────────────────
 
-  const handleRemoveReference = useCallback(() => {
-    setValueSource(undefined);
-    onSave({ valueSource: undefined });
-  }, [onSave]);
+  const handleSegmentsChange = useCallback(
+    (newSegments: EditorSegment[]) => {
+      setSegments(newSegments);
 
-  const handleOpenRefPicker = useCallback(() => {
-    const area = refInputAreaRef.current;
-    if (area) {
-      const rect = area.getBoundingClientRect();
-      setRefPickerPos({
-        top: rect.bottom + 4,
-        left: rect.left,
-      });
-    }
-    setShowRefPicker(true);
-  }, []);
+      // Convert segments to valueSource for saving
+      const refs = newSegments.filter(
+        (s): s is { type: "ref"; ref: ColumnReference } => s.type === "ref"
+      );
+
+      if (refs.length === 0) {
+        onSave(column.id, { valueSource: undefined });
+      } else {
+        // Save the first ref as the primary valueSource
+        // (full template is saved via the template string)
+        const firstRef = refs[0].ref;
+        const newSource: ColumnValueSource = {
+          type: "reference",
+          sourceColumnId: firstRef.columnId,
+          sourceField: firstRef.field,
+          expression: segmentsToTemplate(newSegments),
+        };
+        onSave(column.id, { valueSource: newSource });
+      }
+    },
+    [onSave]
+  );
 
   const handleRefSelect = useCallback(
-    (ref: string) => {
-      // ref comes as "{{ColumnName}}" or "{{ColumnName.field}}"
-      const match = ref.match(/^\{\{(.+?)(?:\.(.+?))?\}\}$/);
-      if (match) {
-        const colName = match[1];
-        const field = match[2] ?? undefined;
-        const sourceCol = allColumns.find((c) => c.name === colName);
-        if (sourceCol) {
-          const newSource: ColumnValueSource = {
-            type: "reference",
-            sourceColumnId: sourceCol.id,
-            sourceField: field,
-          };
-          setValueSource(newSource);
-          onSave({ valueSource: newSource });
-        }
-      }
+    (ref: ColumnReference) => {
+      const newSegments: EditorSegment[] = [
+        ...segments,
+        { type: "ref", ref },
+      ];
+      setSegments(newSegments);
+      handleSegmentsChange(newSegments);
       setShowRefPicker(false);
     },
-    [allColumns, onSave]
+    [segments, handleSegmentsChange]
+  );
+
+  const handleOpenRefPicker = useCallback(
+    (rect: { top: number; left: number; width: number }) => {
+      setRefPickerTriggerRect(rect);
+      setShowRefPicker(true);
+    },
+    []
   );
 
   const handleRefPickerClose = useCallback(() => {
     setShowRefPicker(false);
   }, []);
-
-  // Handle "/" keydown inside the reference input area
-  const handleRefAreaKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (e.key === "/") {
-        e.preventDefault();
-        handleOpenRefPicker();
-      }
-      // Backspace to remove selected chip or last chip
-      if (e.key === "Backspace" && valueSource) {
-        handleRemoveReference();
-      }
-    },
-    [handleOpenRefPicker, handleRemoveReference, valueSource]
-  );
 
   // ── Formula handlers ──────────────────────────────────────────
 
@@ -434,7 +619,11 @@ export function ColumnConfigEditor({
         const textarea = formulaTextareaRef.current;
         if (textarea) {
           const rect = textarea.getBoundingClientRect();
-          setRefPickerPos({ top: rect.bottom + 4, left: rect.left });
+          setRefPickerTriggerRect({
+            top: rect.bottom + 4,
+            left: rect.left,
+            width: rect.width,
+          });
           setFormulaSlashIndex(e.target.selectionStart - 1);
           setShowRefPicker(true);
         }
@@ -444,13 +633,16 @@ export function ColumnConfigEditor({
   );
 
   const handleFormulaRefSelect = useCallback(
-    (ref: string) => {
+    (ref: ColumnReference) => {
       if (formulaSlashIndex !== null) {
+        const refStr = ref.field
+          ? `{{${ref.columnName}.${ref.field}}}`
+          : `{{${ref.columnName}}}`;
         const before = formulaValue.slice(0, formulaSlashIndex);
         const after = formulaValue.slice(formulaSlashIndex + 1);
-        const newVal = before + ref + after;
+        const newVal = before + refStr + after;
         setFormulaValue(newVal);
-        onSave({ config: { expression: newVal } });
+        onSave(column.id, { config: { expression: newVal } });
       }
       setShowRefPicker(false);
       setFormulaSlashIndex(null);
@@ -461,7 +653,7 @@ export function ColumnConfigEditor({
 
   const handleFormulaSave = useCallback(() => {
     if (column.columnType === ColumnBehaviorType.Formula) {
-      onSave({ config: { expression: formulaValue } });
+      onSave(column.id, { config: { expression: formulaValue } });
     }
   }, [formulaValue, column.columnType, onSave]);
 
@@ -483,7 +675,11 @@ export function ColumnConfigEditor({
         const textarea = aiTextareaRef.current;
         if (textarea) {
           const rect = textarea.getBoundingClientRect();
-          setRefPickerPos({ top: rect.bottom + 4, left: rect.left });
+          setRefPickerTriggerRect({
+            top: rect.bottom + 4,
+            left: rect.left,
+            width: rect.width,
+          });
           setAiSlashIndex(e.target.selectionStart - 1);
           setShowRefPicker(true);
         }
@@ -493,13 +689,16 @@ export function ColumnConfigEditor({
   );
 
   const handleAiRefSelect = useCallback(
-    (ref: string) => {
+    (ref: ColumnReference) => {
       if (aiSlashIndex !== null) {
+        const refStr = ref.field
+          ? `{{${ref.columnName}.${ref.field}}}`
+          : `{{${ref.columnName}}}`;
         const before = aiPrompt.slice(0, aiSlashIndex);
         const after = aiPrompt.slice(aiSlashIndex + 1);
-        const newVal = before + ref + after;
+        const newVal = before + refStr + after;
         setAiPrompt(newVal);
-        onSave({
+        onSave(column.id, {
           config: {
             prompt: newVal,
             model: aiModel,
@@ -516,7 +715,7 @@ export function ColumnConfigEditor({
 
   const handleAiSave = useCallback(() => {
     if (column.columnType === ColumnBehaviorType.AIAgent) {
-      onSave({
+      onSave(column.id, {
         config: {
           prompt: aiPrompt,
           model: aiModel as AIAgentConfig["model"],
@@ -532,7 +731,7 @@ export function ColumnConfigEditor({
         const next = prev.includes(colId)
           ? prev.filter((id) => id !== colId)
           : [...prev, colId];
-        onSave({
+        onSave(column.id, {
           config: {
             prompt: aiPrompt,
             model: aiModel as AIAgentConfig["model"],
@@ -552,16 +751,6 @@ export function ColumnConfigEditor({
     if (column.columnType === ColumnBehaviorType.AIAgent) return handleAiRefSelect;
     return handleRefSelect;
   }, [column.columnType, handleFormulaRefSelect, handleAiRefSelect, handleRefSelect]);
-
-  // ── Resolve source column for chip display ────────────────────
-
-  const sourceColumn = useMemo(
-    () =>
-      valueSource?.sourceColumnId
-        ? allColumns.find((c) => c.id === valueSource.sourceColumnId)
-        : undefined,
-    [valueSource, allColumns]
-  );
 
   // ── Enrichment info ───────────────────────────────────────────
 
@@ -639,18 +828,26 @@ export function ColumnConfigEditor({
             )}
           </div>
         </div>
-        {!isEditingName && (
-          <button
-            type="button"
-            onClick={() => {
-              setIsEditingName(true);
-              // Focus happens via autoFocus on the input
-            }}
-            className="mt-0.5 rounded-md p-1 text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-zinc-300"
-          >
-            <Pencil className="size-3.5" />
-          </button>
-        )}
+        <div className="flex items-center gap-0.5">
+          {!isEditingName && (
+            <button
+              type="button"
+              onClick={() => setIsEditingName(true)}
+              className="mt-0.5 rounded-md p-1 text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-zinc-300"
+            >
+              <Pencil className="size-3.5" />
+            </button>
+          )}
+          {onClose && (
+            <button
+              type="button"
+              onClick={onClose}
+              className="mt-0.5 rounded-md p-1 text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-zinc-300"
+            >
+              <X className="size-4" />
+            </button>
+          )}
+        </div>
       </div>
 
       <Separator className="bg-zinc-800" />
@@ -678,7 +875,7 @@ export function ColumnConfigEditor({
       <Separator className="bg-zinc-800" />
 
       {/* ════════════════════════════════════════════════════════════
-           MANUAL / TEXT COLUMNS
+           MANUAL / TEXT COLUMNS — Chip-based value editor
          ════════════════════════════════════════════════════════════ */}
       {isManualOrText && (
         <>
@@ -692,50 +889,14 @@ export function ColumnConfigEditor({
             </p>
           </div>
 
-          {/* Reference input area */}
+          {/* Chip editor */}
           <div className="px-4 py-2">
-            <div className="relative">
-              <div
-                ref={refInputAreaRef}
-                tabIndex={0}
-                onKeyDown={handleRefAreaKeyDown}
-                onClick={() => {
-                  if (!valueSource) {
-                    // Click empty area to focus
-                  }
-                }}
-                className={cn(
-                  "flex min-h-[72px] flex-wrap items-start gap-1.5 rounded-md border p-2.5 transition-colors focus-within:ring-1 focus-within:ring-indigo-500/50",
-                  "border-zinc-700 bg-zinc-900/50",
-                  !valueSource && "cursor-text"
-                )}
-              >
-                {valueSource && sourceColumn ? (
-                  <ColumnRefChip
-                    sourceColumn={sourceColumn}
-                    sourceField={valueSource.sourceField}
-                    isSelected={selectedChipIndex === 0}
-                    onRemove={handleRemoveReference}
-                    onClick={() =>
-                      setSelectedChipIndex(selectedChipIndex === 0 ? null : 0)
-                    }
-                  />
-                ) : (
-                  <span className="text-xs text-zinc-600 italic leading-relaxed">
-                    No reference configured
-                  </span>
-                )}
-              </div>
-
-              {/* Gear icon */}
-              <button
-                type="button"
-                className="absolute right-2 top-2 rounded-md p-1 text-zinc-600 transition-colors hover:bg-zinc-800 hover:text-zinc-400"
-                title="Advanced settings"
-              >
-                <Settings className="size-3.5" />
-              </button>
-            </div>
+            <ChipEditor
+              segments={segments}
+              onChange={handleSegmentsChange}
+              onSlashTrigger={handleOpenRefPicker}
+              placeholder="No reference configured"
+            />
 
             {/* "/" hint */}
             <div className="mt-2 flex items-center gap-1.5 text-[10px] text-zinc-600">
@@ -750,9 +911,10 @@ export function ColumnConfigEditor({
           {showRefPicker && (
             <ColumnRefPicker
               columns={otherColumns}
+              rows={rows}
               onSelect={currentRefSelectHandler}
               onClose={handleRefPickerClose}
-              position={refPickerPos}
+              triggerRect={refPickerTriggerRect}
             />
           )}
         </>
@@ -790,7 +952,7 @@ export function ColumnConfigEditor({
               value={enrichmentInputColumn?.id ?? ""}
               onValueChange={(val) => {
                 const cfg = { ...(column.config as Record<string, unknown>), inputColumnId: val };
-                onSave({ config: cfg });
+                onSave(column.id, { config: cfg });
               }}
             >
               <SelectTrigger className="w-full border-zinc-700 bg-zinc-800/50 text-zinc-200">
@@ -952,9 +1114,10 @@ export function ColumnConfigEditor({
           {showRefPicker && (
             <ColumnRefPicker
               columns={otherColumns}
+              rows={rows}
               onSelect={currentRefSelectHandler}
               onClose={handleRefPickerClose}
-              position={refPickerPos}
+              triggerRect={refPickerTriggerRect}
             />
           )}
         </>
@@ -975,7 +1138,7 @@ export function ColumnConfigEditor({
               onValueChange={(val) => {
                 if (!val) return;
                 setAiModel(val);
-                onSave({
+                onSave(column.id, {
                   config: {
                     prompt: aiPrompt,
                     model: val as AIAgentConfig["model"],
@@ -1084,9 +1247,10 @@ export function ColumnConfigEditor({
           {showRefPicker && (
             <ColumnRefPicker
               columns={otherColumns}
+              rows={rows}
               onSelect={currentRefSelectHandler}
               onClose={handleRefPickerClose}
-              position={refPickerPos}
+              triggerRect={refPickerTriggerRect}
             />
           )}
         </>
@@ -1116,7 +1280,7 @@ export function ColumnConfigEditor({
         <Button
           variant="destructive"
           size="sm"
-          onClick={onDelete}
+          onClick={() => onDelete(column.id)}
           className="w-full gap-1.5"
         >
           <Trash2 className="size-3.5" />

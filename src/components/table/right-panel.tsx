@@ -6,7 +6,7 @@ import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
-import type { CellData, ColumnDef } from "@/types/table";
+import type { CellData, ColumnDef, RowData } from "@/types/table";
 import { CellDetailPanel } from "./cell-detail-panel";
 import { ColumnConfigEditor } from "./column-config-editor";
 
@@ -29,6 +29,7 @@ export interface RightPanelProps {
   };
   selectedColumn?: ColumnDef;
   allColumns: ColumnDef[];
+  rows: RowData[];
   onClose: () => void;
   onColumnConfigSave: (columnId: string, config: Partial<ColumnDef>) => void;
   onAddEnrichmentColumn?: (config: unknown) => void;
@@ -51,6 +52,7 @@ export function RightPanel({
   selectedCell,
   selectedColumn,
   allColumns,
+  rows,
   onClose,
   onColumnConfigSave,
   children,
@@ -98,12 +100,14 @@ export function RightPanel({
                   <ColumnConfigEditor
                     column={selectedColumn}
                     allColumns={allColumns}
-                    onSave={(config) =>
-                      onColumnConfigSave(selectedColumn.id, config)
+                    rows={rows}
+                    onSave={(columnId, config) =>
+                      onColumnConfigSave(columnId, config)
                     }
-                    onDelete={() => {
+                    onDelete={(_columnId) => {
                       /* parent handles deletion */
                     }}
+                    onClose={onClose}
                   />
                 )}
 
