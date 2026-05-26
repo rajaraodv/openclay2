@@ -37,27 +37,50 @@ function parseRedisOptions(): RedisOptions {
   };
 }
 
-const connectionOptions = parseRedisOptions();
+let _connectionOptions: RedisOptions | null = null;
+function getConnectionOptions(): RedisOptions {
+  if (!_connectionOptions) _connectionOptions = parseRedisOptions();
+  return _connectionOptions;
+}
 
-// ── Queue ────────────────────────────────────────────────────────────
+// ── Queue (lazy) ────────────────────────────────────────────────────
 
-export const enrichmentQueue = new Queue("enrichment", {
-  connection: connectionOptions,
-  defaultJobOptions: {
-    attempts: 3,
-    backoff: {
-      type: "exponential",
-      delay: 2000,
-    },
-    removeOnComplete: { count: 1000 },
-    removeOnFail: { count: 5000 },
+let _enrichmentQueue: Queue | null = null;
+export function getEnrichmentQueue(): Queue {
+  if (!_enrichmentQueue) {
+    _enrichmentQueue = new Queue("enrichment", {
+      connection: getConnectionOptions(),
+      defaultJobOptions: {
+        attempts: 3,
+        backoff: { type: "exponential", delay: 2000 },
+        removeOnComplete: { count: 1000 },
+        removeOnFail: { count: 5000 },
+      },
+    });
+  }
+  return _enrichmentQueue;
+}
+
+export const enrichmentQueue = new Proxy({} as Queue, {
+  get(_, prop) {
+    return (getEnrichmentQueue() as unknown as Record<string | symbol, unknown>)[prop];
   },
 });
 
-// ── Flow Producer (for parent-child job trees) ───────────────────────
+// ── Flow Producer (lazy) ────────────────────────────────────────────
 
-export const enrichmentFlowProducer = new FlowProducer({
-  connection: connectionOptions,
+let _flowProducer: FlowProducer | null = null;
+export function getFlowProducer(): FlowProducer {
+  if (!_flowProducer) {
+    _flowProducer = new FlowProducer({ connection: getConnectionOptions() });
+  }
+  return _flowProducer;
+}
+
+export const enrichmentFlowProducer = new Proxy({} as FlowProducer, {
+  get(_, prop) {
+    return (getFlowProducer() as unknown as Record<string | symbol, unknown>)[prop];
+  },
 });
 
 // ── Job Data Types ───────────────────────────────────────────────────
@@ -114,30 +137,44 @@ export async function addEnrichColumnJob(
 
 // ── Worker ───────────────────────────────────────────────────────────
 
-const ssePublisher = createPublisher();
-// Eagerly connect the publisher so it's ready when first needed
-ssePublisher.connect().catch(() => {});
+let _ssePublisher: ReturnType<typeof createPublisher> | null = null;
+function getSsePublisher() {
+  if (!_ssePublisher) {
+    _ssePublisher = createPublisher();
+    _ssePublisher.connect().catch(() => {});
+  }
+  return _ssePublisher;
+}
 
-export const enrichmentWorker = new Worker<EnrichmentJobData>(
-  "enrichment",
-  async (job: Job<EnrichmentJobData>) => {
-    if (job.data.type === "enrich_column") {
-      return processEnrichColumn(job as Job<EnrichColumnJobData>);
-    }
-    if (job.data.type === "enrich_cell") {
-      return processEnrichCell(job as Job<EnrichCellJobData>);
-    }
-    throw new Error(`Unknown job type: ${(job.data as { type: string }).type}`);
+let _enrichmentWorker: Worker<EnrichmentJobData> | null = null;
+export function getEnrichmentWorker(): Worker<EnrichmentJobData> {
+  if (!_enrichmentWorker) {
+    _enrichmentWorker = new Worker<EnrichmentJobData>(
+      "enrichment",
+      async (job: Job<EnrichmentJobData>) => {
+        if (job.data.type === "enrich_column") {
+          return processEnrichColumn(job as Job<EnrichColumnJobData>);
+        }
+        if (job.data.type === "enrich_cell") {
+          return processEnrichCell(job as Job<EnrichCellJobData>);
+        }
+        throw new Error(`Unknown job type: ${(job.data as { type: string }).type}`);
+      },
+      {
+        connection: getConnectionOptions(),
+        concurrency: 10,
+        limiter: { max: 50, duration: 1000 },
+      },
+    );
+  }
+  return _enrichmentWorker;
+}
+
+export const enrichmentWorker = new Proxy({} as Worker<EnrichmentJobData>, {
+  get(_, prop) {
+    return (getEnrichmentWorker() as unknown as Record<string | symbol, unknown>)[prop];
   },
-  {
-    connection: parseRedisOptions(),
-    concurrency: 10,
-    limiter: {
-      max: 50,
-      duration: 1000, // 50 jobs per second globally
-    },
-  },
-);
+});
 
 // ── Parent Job: Enrich Column ────────────────────────────────────────
 
@@ -236,7 +273,7 @@ async function processEnrichColumn(
 
     // Publish progress
     await publishEvent(
-      ssePublisher,
+      getSsePublisher(),
       jobProgress(jobId, completedCount, totalRows, failedCount),
       config.tableId,
     );
@@ -285,7 +322,7 @@ async function processEnrichColumn(
 
   // Publish final event
   await publishEvent(
-    ssePublisher,
+    getSsePublisher(),
     jobCompleted(jobId, {
       completed: completedCount,
       failed: failedCount,
@@ -306,7 +343,7 @@ async function processEnrichCell(
 
   // Publish "running" status
   await publishEvent(
-    ssePublisher,
+    getSsePublisher(),
     cellStatusChanged(parentJobId, rowId, columnId, "running"),
     tableId,
   );
@@ -318,7 +355,7 @@ async function processEnrichCell(
     if (outcome.result?.success && outcome.result.data) {
       // Publish success
       await publishEvent(
-        ssePublisher,
+        getSsePublisher(),
         cellStatusChanged(parentJobId, rowId, columnId, "complete", {
           data: outcome.result.data,
           source: outcome.result.source,
@@ -332,7 +369,7 @@ async function processEnrichCell(
 
     // No result from any provider
     await publishEvent(
-      ssePublisher,
+      getSsePublisher(),
       cellStatusChanged(parentJobId, rowId, columnId, "error", {
         error: "No provider returned a result",
         attempts: outcome.attempts.length,
@@ -346,7 +383,7 @@ async function processEnrichCell(
       error instanceof Error ? error.message : String(error);
 
     await publishEvent(
-      ssePublisher,
+      getSsePublisher(),
       cellStatusChanged(parentJobId, rowId, columnId, "error", {
         error: errorMessage,
       }),
@@ -355,7 +392,7 @@ async function processEnrichCell(
 
     // Publish job-level failure event
     await publishEvent(
-      ssePublisher,
+      getSsePublisher(),
       jobFailed(parentJobId, `Cell ${rowId} failed: ${errorMessage}`),
       tableId,
     );
@@ -373,7 +410,7 @@ enrichmentWorker.on("failed", async (job, err) => {
   if (job.data.type === "enrich_cell") {
     const data = job.data as EnrichCellJobData;
     await publishEvent(
-      ssePublisher,
+      getSsePublisher(),
       cellStatusChanged(data.parentJobId, data.rowId, data.columnId, "error", {
         error: err.message,
       }),
