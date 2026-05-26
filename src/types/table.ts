@@ -96,6 +96,7 @@ export type CellValue =
   | number
   | boolean
   | string[]
+  | Record<string, unknown>
   | null
   | undefined;
 

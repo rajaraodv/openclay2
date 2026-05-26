@@ -23,8 +23,8 @@ import {
 
 const MOCK_COLUMNS: ColumnDef[] = [
   {
-    id: "col-name",
-    name: "Full Name",
+    id: "col-domain",
+    name: "Domain",
     dataType: ColumnDataType.Text,
     columnType: ColumnBehaviorType.Manual,
     position: 0,
@@ -34,217 +34,335 @@ const MOCK_COLUMNS: ColumnDef[] = [
     config: {},
   },
   {
-    id: "col-company",
-    name: "Company",
+    id: "col-enrich-company",
+    name: "Enrich Company",
     dataType: ColumnDataType.Text,
-    columnType: ColumnBehaviorType.Manual,
-    position: 1,
-    width: 160,
-    pinned: false,
-    hidden: false,
-    config: {},
-  },
-  {
-    id: "col-email",
-    name: "Email",
-    dataType: ColumnDataType.Email,
     columnType: ColumnBehaviorType.Enrichment,
-    position: 2,
+    position: 1,
     width: 220,
     pinned: false,
     hidden: false,
     config: {
       providerOrder: [
-        { providerId: "hunter", providerName: "Hunter.io", enabled: true },
+        { providerId: "clearbit", providerName: "Clearbit", enabled: true },
         { providerId: "apollo", providerName: "Apollo", enabled: true },
       ],
     },
     autoRun: true,
   },
   {
-    id: "col-title",
-    name: "Title",
-    dataType: ColumnDataType.Text,
-    columnType: ColumnBehaviorType.Enrichment,
-    position: 3,
-    width: 180,
-    pinned: false,
-    hidden: false,
-    config: {
-      providerOrder: [
-        { providerId: "pdl", providerName: "People Data Labs", enabled: true },
-      ],
-    },
-  },
-  {
-    id: "col-linkedin",
-    name: "LinkedIn URL",
+    id: "col-url",
+    name: "Url",
     dataType: ColumnDataType.Url,
-    columnType: ColumnBehaviorType.Enrichment,
-    position: 4,
-    width: 200,
+    columnType: ColumnBehaviorType.Manual,
+    position: 2,
+    width: 260,
     pinned: false,
     hidden: false,
-    config: {
-      providerOrder: [
-        { providerId: "apollo", providerName: "Apollo", enabled: true },
-      ],
-    },
+    config: {},
   },
   {
-    id: "col-industry",
-    name: "Industry",
-    dataType: ColumnDataType.Select,
+    id: "col-slug",
+    name: "slug",
+    dataType: ColumnDataType.Text,
     columnType: ColumnBehaviorType.Manual,
-    position: 5,
+    position: 3,
     width: 150,
     pinned: false,
     hidden: false,
     config: {},
   },
   {
-    id: "col-employees",
-    name: "Employees",
-    dataType: ColumnDataType.Number,
+    id: "col-work-email",
+    name: "Work Email",
+    dataType: ColumnDataType.Email,
     columnType: ColumnBehaviorType.Enrichment,
-    position: 6,
-    width: 120,
-    pinned: false,
-    hidden: false,
-    config: {
-      providerOrder: [
-        { providerId: "clearbit", providerName: "Clearbit", enabled: true },
-      ],
-    },
-  },
-  {
-    id: "col-summary",
-    name: "AI Summary",
-    dataType: ColumnDataType.Text,
-    columnType: ColumnBehaviorType.AIAgent,
-    position: 7,
+    position: 4,
     width: 240,
     pinned: false,
     hidden: false,
     config: {
-      prompt: "Write a 1-sentence summary of this person for sales outreach based on their name, company, and title.",
-      model: "claude-sonnet" as const,
-      contextColumns: ["col-name", "col-company", "col-title"],
+      providerOrder: [
+        { providerId: "findymail", providerName: "Findymail", enabled: true },
+        { providerId: "hunter", providerName: "Hunter", enabled: true },
+        { providerId: "prospeo", providerName: "Prospeo", enabled: true },
+      ],
     },
+    autoRun: true,
   },
 ];
+
+function makeCompanyJson(name: string, domain: string, extras: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    url: `https://www.${domain}`,
+    name,
+    size: extras.size ?? "51-200",
+    slug: extras.slug ?? domain.replace(/\.\w+$/, ""),
+    type: "company",
+    domain,
+    orgId: extras.orgId ?? `org_${Math.random().toString(36).slice(2, 10)}`,
+    country: extras.country ?? "United States",
+    industry: extras.industry ?? "Technology",
+    description: extras.description ?? `${name} is a technology company.`,
+    foundedYear: extras.foundedYear ?? 2018,
+    linkedinUrl: extras.linkedinUrl ?? `https://www.linkedin.com/company/${domain.replace(/\.\w+$/, "")}`,
+    employeeCount: extras.employeeCount ?? 120,
+    ...extras,
+  };
+}
 
 const MOCK_ROWS: RowData[] = [
   {
     id: "row-1",
     position: 0,
     cells: {
-      "col-name": { value: "Sarah Chen", status: CellStatus.Complete },
-      "col-company": { value: "Stripe", status: CellStatus.Complete },
-      "col-email": { value: "sarah.chen@stripe.com", status: CellStatus.Complete, source: "hunter" },
-      "col-title": { value: "VP of Engineering", status: CellStatus.Complete, source: "pdl" },
-      "col-linkedin": { value: "https://linkedin.com/in/sarahchen", status: CellStatus.Complete },
-      "col-industry": { value: "Fintech", status: CellStatus.Complete },
-      "col-employees": { value: 8000, status: CellStatus.Complete },
-      "col-summary": { value: "Senior engineering leader at Stripe driving payments infrastructure.", status: CellStatus.Complete },
+      "col-domain": { value: "servicebell.com", status: CellStatus.Complete },
+      "col-enrich-company": {
+        value: "ServiceBell",
+        rawValue: makeCompanyJson("ServiceBell", "servicebell.com", {
+          size: "11-50",
+          industry: "SaaS",
+          description: "ServiceBell is a live video chat and customer engagement platform for websites.",
+          foundedYear: 2020,
+          employeeCount: 35,
+          slug: "servicebell",
+        }),
+        status: CellStatus.Complete,
+        source: "clearbit",
+      },
+      "col-url": { value: "https://www.linkedin.com/company/servicebell", status: CellStatus.Complete },
+      "col-slug": { value: "servicebell", status: CellStatus.Complete },
+      "col-work-email": { value: "daniel@servicebell.com", status: CellStatus.Complete, source: "findymail" },
     },
   },
   {
     id: "row-2",
     position: 1,
     cells: {
-      "col-name": { value: "Marcus Johnson", status: CellStatus.Complete },
-      "col-company": { value: "Notion", status: CellStatus.Complete },
-      "col-email": { value: "marcus@notion.so", status: CellStatus.Complete, source: "apollo" },
-      "col-title": { value: "Head of Product", status: CellStatus.Complete },
-      "col-linkedin": { value: "https://linkedin.com/in/marcusjohnson", status: CellStatus.Complete },
-      "col-industry": { value: "SaaS", status: CellStatus.Complete },
-      "col-employees": { value: 2500, status: CellStatus.Complete },
-      "col-summary": { value: null, status: CellStatus.Pending },
+      "col-domain": { value: "baseten.co", status: CellStatus.Complete },
+      "col-enrich-company": {
+        value: "Baseten",
+        rawValue: makeCompanyJson("Baseten", "baseten.co", {
+          size: "51-200",
+          industry: "Machine Learning / AI",
+          description: "Baseten provides infrastructure for building and deploying ML-powered applications.",
+          foundedYear: 2019,
+          employeeCount: 95,
+          slug: "baseten",
+        }),
+        status: CellStatus.Complete,
+        source: "clearbit",
+      },
+      "col-url": { value: "https://www.linkedin.com/company/baseten", status: CellStatus.Complete },
+      "col-slug": { value: "baseten", status: CellStatus.Complete },
+      "col-work-email": { value: "tuhin@baseten.co", status: CellStatus.Complete, source: "hunter" },
     },
   },
   {
     id: "row-3",
     position: 2,
     cells: {
-      "col-name": { value: "Priya Patel", status: CellStatus.Complete },
-      "col-company": { value: "Figma", status: CellStatus.Complete },
-      "col-email": { value: null, status: CellStatus.Running },
-      "col-title": { value: "Director of Design", status: CellStatus.Complete },
-      "col-linkedin": { value: "https://linkedin.com/in/priyapatel", status: CellStatus.Complete },
-      "col-industry": { value: "Design Tools", status: CellStatus.Complete },
-      "col-employees": { value: 1200, status: CellStatus.Complete },
-      "col-summary": { value: null, status: CellStatus.Empty },
+      "col-domain": { value: "superhuman.com", status: CellStatus.Complete },
+      "col-enrich-company": {
+        value: "Superhuman",
+        rawValue: makeCompanyJson("Superhuman", "superhuman.com", {
+          size: "51-200",
+          industry: "Productivity Software",
+          description: "Superhuman is the fastest email experience in the world.",
+          foundedYear: 2014,
+          employeeCount: 180,
+          slug: "superhuman",
+        }),
+        status: CellStatus.Complete,
+        source: "apollo",
+      },
+      "col-url": { value: "https://www.linkedin.com/company/superhuman", status: CellStatus.Complete },
+      "col-slug": { value: "superhuman", status: CellStatus.Complete },
+      "col-work-email": { value: "rahul@superhuman.com", status: CellStatus.Complete, source: "findymail" },
     },
   },
   {
     id: "row-4",
     position: 3,
     cells: {
-      "col-name": { value: "James Wilson", status: CellStatus.Complete },
-      "col-company": { value: "Datadog", status: CellStatus.Complete },
-      "col-email": { value: "jwilson@datadoghq.com", status: CellStatus.Complete, source: "hunter" },
-      "col-title": { value: null, status: CellStatus.Error, errorMessage: "No match found" },
-      "col-linkedin": { value: null, status: CellStatus.Pending },
-      "col-industry": { value: "DevOps", status: CellStatus.Complete },
-      "col-employees": { value: 5500, status: CellStatus.Complete },
-      "col-summary": { value: null, status: CellStatus.Empty },
+      "col-domain": { value: "donut.com", status: CellStatus.Complete },
+      "col-enrich-company": {
+        value: "Donut",
+        rawValue: makeCompanyJson("Donut", "donut.com", {
+          size: "11-50",
+          industry: "HR Technology",
+          description: "Donut helps build connections and foster community in the workplace through Slack.",
+          foundedYear: 2016,
+          employeeCount: 40,
+          slug: "donut",
+        }),
+        status: CellStatus.Complete,
+        source: "clearbit",
+      },
+      "col-url": { value: "https://www.linkedin.com/company/donut-app", status: CellStatus.Complete },
+      "col-slug": { value: "donut", status: CellStatus.Complete },
+      "col-work-email": { value: null, status: CellStatus.Running },
     },
   },
   {
     id: "row-5",
     position: 4,
     cells: {
-      "col-name": { value: "Emily Rodriguez", status: CellStatus.Complete },
-      "col-company": { value: "Vercel", status: CellStatus.Complete },
-      "col-email": { value: "emily@vercel.com", status: CellStatus.Complete, source: "apollo" },
-      "col-title": { value: "CTO", status: CellStatus.Complete },
-      "col-linkedin": { value: "https://linkedin.com/in/emilyrodriguez", status: CellStatus.Complete },
-      "col-industry": { value: "Developer Tools", status: CellStatus.Complete },
-      "col-employees": { value: 450, status: CellStatus.Complete },
-      "col-summary": { value: "CTO at Vercel with deep expertise in frontend infrastructure and developer experience.", status: CellStatus.Complete },
+      "col-domain": { value: "mux.com", status: CellStatus.Complete },
+      "col-enrich-company": {
+        value: "Mux",
+        rawValue: makeCompanyJson("Mux", "mux.com", {
+          size: "51-200",
+          industry: "Video Infrastructure",
+          description: "Mux provides developer tools for video streaming and data analytics.",
+          foundedYear: 2015,
+          employeeCount: 150,
+          slug: "mux",
+        }),
+        status: CellStatus.Complete,
+        source: "clearbit",
+      },
+      "col-url": { value: "https://www.linkedin.com/company/maboroshi-mux", status: CellStatus.Complete },
+      "col-slug": { value: "mux", status: CellStatus.Complete },
+      "col-work-email": { value: null, status: CellStatus.Running },
     },
   },
   {
     id: "row-6",
     position: 5,
     cells: {
-      "col-name": { value: "David Kim", status: CellStatus.Complete },
-      "col-company": { value: "Linear", status: CellStatus.Complete },
-      "col-email": { value: null, status: CellStatus.Pending },
-      "col-title": { value: "Co-founder", status: CellStatus.Complete },
-      "col-linkedin": { value: null, status: CellStatus.Empty },
-      "col-industry": { value: "SaaS", status: CellStatus.Complete },
-      "col-employees": { value: 100, status: CellStatus.Complete },
-      "col-summary": { value: null, status: CellStatus.Empty },
+      "col-domain": { value: "replit.com", status: CellStatus.Complete },
+      "col-enrich-company": {
+        value: "Replit",
+        rawValue: makeCompanyJson("Replit", "replit.com", {
+          size: "201-500",
+          industry: "Developer Tools",
+          description: "Replit is a browser-based IDE that lets you write and run code in any language.",
+          foundedYear: 2016,
+          employeeCount: 250,
+          slug: "replit",
+        }),
+        status: CellStatus.Complete,
+        source: "apollo",
+      },
+      "col-url": { value: "https://www.linkedin.com/company/replit", status: CellStatus.Complete },
+      "col-slug": { value: "replit", status: CellStatus.Complete },
+      "col-work-email": { value: null, status: CellStatus.Empty },
     },
   },
   {
     id: "row-7",
     position: 6,
     cells: {
-      "col-name": { value: "Lisa Thompson", status: CellStatus.Complete },
-      "col-company": { value: "Snowflake", status: CellStatus.Complete },
-      "col-email": { value: "lthompson@snowflake.com", status: CellStatus.Complete },
-      "col-title": { value: "VP of Sales", status: CellStatus.Complete },
-      "col-linkedin": { value: "https://linkedin.com/in/lisathompson", status: CellStatus.Complete },
-      "col-industry": { value: "Data", status: CellStatus.Complete },
-      "col-employees": { value: 6000, status: CellStatus.Complete },
-      "col-summary": { value: "VP Sales at Snowflake driving enterprise data cloud adoption.", status: CellStatus.Complete },
+      "col-domain": { value: "linear.app", status: CellStatus.Complete },
+      "col-enrich-company": {
+        value: "Linear",
+        rawValue: makeCompanyJson("Linear", "linear.app", {
+          size: "51-200",
+          industry: "Project Management",
+          description: "Linear is the issue tracking tool for high-performance teams.",
+          foundedYear: 2019,
+          employeeCount: 85,
+          slug: "linear",
+        }),
+        status: CellStatus.Complete,
+        source: "clearbit",
+      },
+      "col-url": { value: "https://www.linkedin.com/company/linear-app", status: CellStatus.Complete },
+      "col-slug": { value: "linear", status: CellStatus.Complete },
+      "col-work-email": { value: null, status: CellStatus.Empty },
     },
   },
   {
     id: "row-8",
     position: 7,
     cells: {
-      "col-name": { value: "Alex Nguyen", status: CellStatus.Complete },
-      "col-company": { value: "Supabase", status: CellStatus.Complete },
-      "col-email": { value: "alex@supabase.io", status: CellStatus.Complete },
-      "col-title": { value: "Lead Engineer", status: CellStatus.Complete },
-      "col-linkedin": { value: null, status: CellStatus.Pending },
-      "col-industry": { value: "Developer Tools", status: CellStatus.Complete },
-      "col-employees": { value: 200, status: CellStatus.Complete },
-      "col-summary": { value: null, status: CellStatus.Running },
+      "col-domain": { value: "vercel.com", status: CellStatus.Complete },
+      "col-enrich-company": {
+        value: "Vercel",
+        rawValue: makeCompanyJson("Vercel", "vercel.com", {
+          size: "501-1000",
+          industry: "Cloud Infrastructure",
+          description: "Vercel is the platform for frontend developers, providing speed and reliability.",
+          foundedYear: 2015,
+          employeeCount: 550,
+          slug: "vercel",
+        }),
+        status: CellStatus.Complete,
+        source: "clearbit",
+      },
+      "col-url": { value: "https://www.linkedin.com/company/vercel", status: CellStatus.Complete },
+      "col-slug": { value: "vercel", status: CellStatus.Complete },
+      "col-work-email": { value: null, status: CellStatus.Empty },
+    },
+  },
+  {
+    id: "row-9",
+    position: 8,
+    cells: {
+      "col-domain": { value: "retool.com", status: CellStatus.Complete },
+      "col-enrich-company": {
+        value: "Retool",
+        rawValue: makeCompanyJson("Retool", "retool.com", {
+          size: "201-500",
+          industry: "Developer Tools",
+          description: "Retool is the fast way to build internal tools.",
+          foundedYear: 2017,
+          employeeCount: 350,
+          slug: "retool",
+        }),
+        status: CellStatus.Complete,
+        source: "apollo",
+      },
+      "col-url": { value: "https://www.linkedin.com/company/retool", status: CellStatus.Complete },
+      "col-slug": { value: "retool", status: CellStatus.Complete },
+      "col-work-email": { value: null, status: CellStatus.Empty },
+    },
+  },
+  {
+    id: "row-10",
+    position: 9,
+    cells: {
+      "col-domain": { value: "openphone.com", status: CellStatus.Complete },
+      "col-enrich-company": {
+        value: "OpenPhone",
+        rawValue: makeCompanyJson("OpenPhone", "openphone.com", {
+          size: "51-200",
+          industry: "Telecommunications",
+          description: "OpenPhone is a modern business phone system for startups and small businesses.",
+          foundedYear: 2017,
+          employeeCount: 120,
+          slug: "openphone",
+        }),
+        status: CellStatus.Complete,
+        source: "clearbit",
+      },
+      "col-url": { value: "https://www.linkedin.com/company/openphone", status: CellStatus.Complete },
+      "col-slug": { value: "openphone", status: CellStatus.Complete },
+      "col-work-email": { value: null, status: CellStatus.Empty },
+    },
+  },
+  {
+    id: "row-11",
+    position: 10,
+    cells: {
+      "col-domain": { value: "loom.com", status: CellStatus.Complete },
+      "col-enrich-company": {
+        value: "Loom",
+        rawValue: makeCompanyJson("Loom", "loom.com", {
+          size: "201-500",
+          industry: "Video / Productivity",
+          description: "Loom is a video messaging tool that helps you get your message across through instantly shareable videos.",
+          foundedYear: 2015,
+          employeeCount: 300,
+          slug: "loom",
+        }),
+        status: CellStatus.Complete,
+        source: "clearbit",
+      },
+      "col-url": { value: "https://www.linkedin.com/company/laboratory-of-organic-materials", status: CellStatus.Complete },
+      "col-slug": { value: "loom", status: CellStatus.Complete },
+      "col-work-email": { value: null, status: CellStatus.Empty },
     },
   },
 ];
@@ -293,7 +411,7 @@ export function useTable(tableId: string) {
       // Mock response
       return {
         id: tableId,
-        name: "Sales Prospects Q4",
+        name: "Company Enrichment Pipeline",
         columns: MOCK_COLUMNS,
         rowCount: MOCK_ROWS.length,
       };
@@ -314,16 +432,6 @@ export function useRows(
   return useQuery<RowsResponse>({
     queryKey: tableKeys.rowsFiltered(tableId, filters, sorts, page),
     queryFn: async () => {
-      // In production, this would call the API:
-      // const params = new URLSearchParams({
-      //   page: String(page),
-      //   pageSize: String(pageSize),
-      // });
-      // if (filters) params.set("filters", JSON.stringify(filters));
-      // if (sorts) params.set("sorts", JSON.stringify(sorts));
-      // const res = await fetch(`/api/tables/${tableId}/rows?${params}`);
-      // return res.json();
-
       // Mock response with optional client-side filtering
       let filteredRows = [...MOCK_ROWS];
 
@@ -391,13 +499,6 @@ export function useUpdateCell() {
       columnId: string;
       value: CellValue;
     }) => {
-      // In production:
-      // const res = await fetch(`/api/tables/${tableId}/rows/${rowId}/cells/${columnId}`, {
-      //   method: "PATCH",
-      //   headers: { "Content-Type": "application/json" },
-      //   body: JSON.stringify({ value }),
-      // });
-      // return res.json();
       return { rowId, columnId, value };
     },
     onMutate: async ({ tableId, rowId, columnId, value }) => {
@@ -447,12 +548,6 @@ export function useAddRow() {
 
   return useMutation({
     mutationFn: async ({ tableId }: { tableId: string }) => {
-      // In production:
-      // const res = await fetch(`/api/tables/${tableId}/rows`, {
-      //   method: "POST",
-      // });
-      // return res.json();
-
       const newRow: RowData = {
         id: `row-${Date.now()}`,
         position: 0,
@@ -513,14 +608,6 @@ export function useAddColumn() {
       dataType?: ColumnDataType;
       columnType?: ColumnBehaviorType;
     }) => {
-      // In production:
-      // const res = await fetch(`/api/tables/${tableId}/columns`, {
-      //   method: "POST",
-      //   headers: { "Content-Type": "application/json" },
-      //   body: JSON.stringify({ name, dataType, columnType }),
-      // });
-      // return res.json();
-
       const newCol: ColumnDef = {
         id: `col-${Date.now()}`,
         name: name ?? "New Column",

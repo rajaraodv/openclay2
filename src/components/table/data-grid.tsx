@@ -41,8 +41,8 @@ const DataEditor = dynamic(
 
 function DataGridSkeleton() {
   return (
-    <div className="flex h-full w-full items-center justify-center bg-background">
-      <div className="flex flex-col items-center gap-2 text-muted-foreground">
+    <div className="flex h-full w-full items-center justify-center bg-zinc-950">
+      <div className="flex flex-col items-center gap-2 text-zinc-500">
         <div className="h-6 w-6 animate-spin rounded-full border-2 border-current border-t-transparent" />
         <span className="text-sm">Loading spreadsheet...</span>
       </div>
@@ -53,22 +53,22 @@ function DataGridSkeleton() {
 // ── Column type icons ────────────────────────────────────────────────
 
 const DATA_TYPE_ICONS: Record<string, string> = {
-  text: "\u{1f4dd}",
+  text: "Aa",
   url: "\u{1f517}",
-  number: "#️",
+  number: "#",
   date: "\u{1f4c5}",
-  select: "\u{1f3f7}️",
-  multi_select: "\u{1f3f7}️",
-  checkbox: "☑️",
-  currency: "\u{1f4b0}",
-  email: "\u{1f4e7}",
-  image: "\u{1f5bc}️",
+  select: "\u{1f3f7}",
+  multi_select: "\u{1f3f7}",
+  checkbox: "☑",
+  currency: "$",
+  email: "@",
+  image: "\u{1f5bc}",
   assigned_to: "\u{1f464}",
 };
 
 const BEHAVIOR_TYPE_ICONS: Record<string, string> = {
   enrichment: "\u{1f504}",
-  formula: "\u{1f9ee}",
+  formula: "fx",
   ai_agent: "\u{1f916}",
   action: "⚡",
 };
@@ -79,12 +79,12 @@ const STATUS_INDICATOR: Record<
   string,
   { symbol: string; color: string }
 > = {
-  empty: { symbol: "—", color: "#9ca3af" },
+  empty: { symbol: "", color: "#52525b" },
   pending: { symbol: "⏳", color: "#f59e0b" },
   running: { symbol: "●", color: "#3b82f6" },
   complete: { symbol: "✓", color: "#22c55e" },
   error: { symbol: "✗", color: "#ef4444" },
-  skipped: { symbol: "—", color: "#9ca3af" },
+  skipped: { symbol: "—", color: "#52525b" },
 };
 
 // ── Custom cell data for our enrichment overlay ──────────────────────
@@ -106,16 +106,16 @@ type OpenClayCell = CustomCell<OpenClayCellData>;
 // ── Tag color palette ────────────────────────────────────────────────
 
 const TAG_COLORS = [
-  { bg: "#dbeafe", text: "#1d4ed8" },
-  { bg: "#dcfce7", text: "#166534" },
-  { bg: "#fef9c3", text: "#854d0e" },
-  { bg: "#fce7f3", text: "#9d174d" },
-  { bg: "#e0e7ff", text: "#3730a3" },
-  { bg: "#fde68a", text: "#92400e" },
-  { bg: "#d1fae5", text: "#065f46" },
-  { bg: "#ede9fe", text: "#5b21b6" },
-  { bg: "#fee2e2", text: "#991b1b" },
-  { bg: "#cffafe", text: "#155e75" },
+  { bg: "#1e3a5f", text: "#60a5fa" },
+  { bg: "#14532d", text: "#4ade80" },
+  { bg: "#422006", text: "#facc15" },
+  { bg: "#4a0e2e", text: "#f472b6" },
+  { bg: "#1e1b4b", text: "#818cf8" },
+  { bg: "#431407", text: "#fbbf24" },
+  { bg: "#064e3b", text: "#34d399" },
+  { bg: "#2e1065", text: "#a78bfa" },
+  { bg: "#450a0a", text: "#f87171" },
+  { bg: "#083344", text: "#22d3ee" },
 ];
 
 function getTagColor(tag: string) {
@@ -124,6 +124,22 @@ function getTagColor(tag: string) {
     hash = tag.charCodeAt(i) + ((hash << 5) - hash);
   }
   return TAG_COLORS[Math.abs(hash) % TAG_COLORS.length];
+}
+
+// ── Color map for company icons ─────────────────────────────────────
+
+const COMPANY_COLORS = [
+  "#6366f1", "#ec4899", "#f97316", "#14b8a6",
+  "#8b5cf6", "#ef4444", "#22c55e", "#3b82f6",
+  "#f59e0b", "#06b6d4", "#a855f7", "#10b981",
+];
+
+function getCompanyColor(name: string): string {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return COMPANY_COLORS[Math.abs(hash) % COMPANY_COLORS.length];
 }
 
 // ── Custom renderer for OpenClay cells ───────────────────────────────
@@ -147,22 +163,37 @@ const openClayCellRenderer: CustomRenderer<OpenClayCell> = {
 
     ctx.save();
 
-    // Draw status indicator for enrichment/ai_agent/formula columns
     const isAutomated =
       columnType === ColumnBehaviorType.Enrichment ||
       columnType === ColumnBehaviorType.AIAgent ||
       columnType === ColumnBehaviorType.Formula ||
       columnType === ColumnBehaviorType.Action;
 
+    // ── Status-based cell background ────────────────────────────
+    if (isAutomated) {
+      if (status === CellStatusEnum.Complete && displayValue) {
+        // Green left border for complete cells
+        ctx.fillStyle = "#16a34a";
+        ctx.fillRect(rect.x, rect.y, 3, rect.height);
+      } else if (status === CellStatusEnum.Running) {
+        // Light yellow-ish bg for running
+        ctx.fillStyle = "rgba(250, 204, 21, 0.06)";
+        ctx.fillRect(rect.x, rect.y, rect.width, rect.height);
+      } else if (status === CellStatusEnum.Error) {
+        // Light red bg for error
+        ctx.fillStyle = "rgba(239, 68, 68, 0.06)";
+        ctx.fillRect(rect.x, rect.y, rect.width, rect.height);
+      }
+    }
+
     let statusWidth = 0;
-    if (isAutomated && status !== CellStatusEnum.Complete) {
+    if (isAutomated && status !== CellStatusEnum.Complete && status !== CellStatusEnum.Empty) {
       const indicator = STATUS_INDICATOR[status] ?? STATUS_INDICATOR.empty;
-      ctx.fillStyle = indicator.color;
-      ctx.font = "10px sans-serif";
 
       if (status === CellStatusEnum.Running) {
         // Animated pulsing dot
         const pulse = 0.4 + 0.6 * Math.abs(Math.sin(Date.now() / 400));
+        ctx.fillStyle = indicator.color;
         ctx.globalAlpha = pulse;
         ctx.beginPath();
         ctx.arc(x + 6, midY, 4, 0, 2 * Math.PI);
@@ -170,206 +201,194 @@ const openClayCellRenderer: CustomRenderer<OpenClayCell> = {
         ctx.globalAlpha = 1;
         reqAF();
         statusWidth = 16;
-      } else {
+      } else if (status === CellStatusEnum.Error) {
+        ctx.fillStyle = indicator.color;
+        ctx.font = "bold 11px sans-serif";
         ctx.textBaseline = "middle";
-        ctx.fillText(indicator.symbol, x, midY);
-        statusWidth = ctx.measureText(indicator.symbol).width + 4;
+        ctx.fillText("✗", x + 1, midY);
+        statusWidth = 14;
+      } else if (status === CellStatusEnum.Pending) {
+        ctx.fillStyle = indicator.color;
+        ctx.font = "10px sans-serif";
+        ctx.textBaseline = "middle";
+        ctx.fillText("⏱", x + 1, midY);
+        statusWidth = 14;
       }
     }
 
     const contentX = x + statusWidth;
     const contentW = w - statusWidth;
 
-    // ── Draw cell content based on data type ─────────────────────
-
     ctx.textBaseline = "middle";
 
-    switch (dataType) {
-      case ColumnDataType.Url:
-      case ColumnDataType.Email: {
-        ctx.fillStyle = "#2563eb";
-        ctx.font = `13px ${theme.fontFamily}`;
-        const text = displayValue || "";
-        const metrics = ctx.measureText(text);
-        const textWidth = Math.min(metrics.width, contentW);
-        ctx.fillText(text, contentX, midY, contentW);
-        // Underline
-        ctx.strokeStyle = "#2563eb";
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(contentX, midY + 7);
-        ctx.lineTo(contentX + textWidth, midY + 7);
-        ctx.stroke();
-        break;
-      }
+    // ── Enrichment column with complete data: show icon + company name ──
+    if (isAutomated && columnType === ColumnBehaviorType.Enrichment && status === CellStatusEnum.Complete && displayValue) {
+      // Draw colored circle icon
+      const iconSize = 18;
+      const iconX = contentX + 1;
+      const iconY = midY - iconSize / 2;
+      const iconColor = getCompanyColor(displayValue);
 
-      case ColumnDataType.Number: {
-        ctx.fillStyle = theme.textDark;
-        ctx.font = `13px ${theme.fontFamily}`;
-        ctx.textAlign = "right";
-        ctx.fillText(displayValue || "", contentX + contentW, midY, contentW);
-        ctx.textAlign = "left";
-        break;
-      }
+      ctx.fillStyle = iconColor;
+      ctx.beginPath();
+      ctx.arc(iconX + iconSize / 2, midY, iconSize / 2, 0, 2 * Math.PI);
+      ctx.fill();
 
-      case ColumnDataType.Currency: {
-        ctx.fillStyle = theme.textDark;
-        ctx.font = `13px ${theme.fontFamily}`;
-        ctx.textAlign = "right";
-        const formatted = displayValue ? `$${displayValue}` : "";
-        ctx.fillText(formatted, contentX + contentW, midY, contentW);
-        ctx.textAlign = "left";
-        break;
-      }
+      // Draw initial letter
+      const initial = displayValue.charAt(0).toUpperCase();
+      ctx.fillStyle = "#ffffff";
+      ctx.font = `bold 10px ${theme.fontFamily}`;
+      ctx.textAlign = "center";
+      ctx.fillText(initial, iconX + iconSize / 2, midY + 1);
+      ctx.textAlign = "left";
 
-      case ColumnDataType.Date: {
-        ctx.fillStyle = theme.textDark;
-        ctx.font = `13px ${theme.fontFamily}`;
-        ctx.fillText(displayValue || "", contentX, midY, contentW);
-        break;
-      }
+      // Draw company name
+      ctx.fillStyle = "#e4e4e7";
+      ctx.font = `13px ${theme.fontFamily}`;
+      ctx.fillText(displayValue, iconX + iconSize + 6, midY, contentW - iconSize - 8);
+    } else {
+      // ── Draw cell content based on data type ─────────────────────
+      switch (dataType) {
+        case ColumnDataType.Url:
+        case ColumnDataType.Email: {
+          ctx.fillStyle = "#60a5fa";
+          ctx.font = `13px ${theme.fontFamily}`;
+          const text = displayValue || "";
+          const metrics = ctx.measureText(text);
+          const textWidth = Math.min(metrics.width, contentW);
+          ctx.fillText(text, contentX, midY, contentW);
+          // Underline
+          ctx.strokeStyle = "#60a5fa40";
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(contentX, midY + 7);
+          ctx.lineTo(contentX + textWidth, midY + 7);
+          ctx.stroke();
+          break;
+        }
 
-      case ColumnDataType.Checkbox: {
-        const boxSize = 16;
-        const boxX = contentX + 2;
-        const boxY = midY - boxSize / 2;
-        ctx.strokeStyle = checked ? "#22c55e" : "#d1d5db";
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        roundRect(ctx, boxX, boxY, boxSize, boxSize, 3);
-        ctx.stroke();
-        if (checked) {
-          ctx.fillStyle = "#22c55e";
+        case ColumnDataType.Number: {
+          ctx.fillStyle = "#e4e4e7";
+          ctx.font = `13px ${theme.fontFamily}`;
+          ctx.textAlign = "right";
+          ctx.fillText(displayValue || "", contentX + contentW, midY, contentW);
+          ctx.textAlign = "left";
+          break;
+        }
+
+        case ColumnDataType.Currency: {
+          ctx.fillStyle = "#e4e4e7";
+          ctx.font = `13px ${theme.fontFamily}`;
+          ctx.textAlign = "right";
+          const formatted = displayValue ? `$${displayValue}` : "";
+          ctx.fillText(formatted, contentX + contentW, midY, contentW);
+          ctx.textAlign = "left";
+          break;
+        }
+
+        case ColumnDataType.Checkbox: {
+          const boxSize = 16;
+          const boxX = contentX + 2;
+          const boxY = midY - boxSize / 2;
+          ctx.strokeStyle = checked ? "#22c55e" : "#52525b";
+          ctx.lineWidth = 1.5;
           ctx.beginPath();
           roundRect(ctx, boxX, boxY, boxSize, boxSize, 3);
-          ctx.fill();
-          // Checkmark
-          ctx.strokeStyle = "#ffffff";
-          ctx.lineWidth = 2;
-          ctx.beginPath();
-          ctx.moveTo(boxX + 4, midY);
-          ctx.lineTo(boxX + 7, midY + 3);
-          ctx.lineTo(boxX + 12, midY - 3);
           ctx.stroke();
+          if (checked) {
+            ctx.fillStyle = "#22c55e";
+            ctx.beginPath();
+            roundRect(ctx, boxX, boxY, boxSize, boxSize, 3);
+            ctx.fill();
+            ctx.strokeStyle = "#ffffff";
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(boxX + 4, midY);
+            ctx.lineTo(boxX + 7, midY + 3);
+            ctx.lineTo(boxX + 12, midY - 3);
+            ctx.stroke();
+          }
+          break;
         }
-        break;
-      }
 
-      case ColumnDataType.Select: {
-        if (tags && tags.length > 0) {
-          const tag = tags[0];
-          const color = getTagColor(tag);
-          ctx.font = `12px ${theme.fontFamily}`;
-          const tw = ctx.measureText(tag).width;
-          const paddingH = 8;
-          const paddingV = 4;
-          const tagH = 20;
-          const tagW = tw + paddingH * 2;
-          const tagY = midY - tagH / 2;
-
-          ctx.fillStyle = color.bg;
-          ctx.beginPath();
-          roundRect(ctx, contentX, tagY, tagW, tagH, 10);
-          ctx.fill();
-
-          ctx.fillStyle = color.text;
-          ctx.textBaseline = "middle";
-          ctx.fillText(tag, contentX + paddingH, midY);
-        }
-        break;
-      }
-
-      case ColumnDataType.MultiSelect: {
-        if (tags && tags.length > 0) {
-          let offsetX = contentX;
-          ctx.font = `11px ${theme.fontFamily}`;
-          for (const tag of tags) {
+        case ColumnDataType.Select: {
+          if (tags && tags.length > 0) {
+            const tag = tags[0];
             const color = getTagColor(tag);
+            ctx.font = `12px ${theme.fontFamily}`;
             const tw = ctx.measureText(tag).width;
-            const paddingH = 6;
-            const tagH = 18;
+            const paddingH = 8;
+            const tagH = 20;
             const tagW = tw + paddingH * 2;
             const tagY = midY - tagH / 2;
-
-            if (offsetX + tagW > contentX + contentW) break;
-
             ctx.fillStyle = color.bg;
             ctx.beginPath();
-            roundRect(ctx, offsetX, tagY, tagW, tagH, 9);
+            roundRect(ctx, contentX, tagY, tagW, tagH, 10);
             ctx.fill();
-
             ctx.fillStyle = color.text;
             ctx.textBaseline = "middle";
-            ctx.fillText(tag, offsetX + paddingH, midY);
-            offsetX += tagW + 4;
+            ctx.fillText(tag, contentX + paddingH, midY);
           }
+          break;
         }
-        break;
-      }
 
-      case ColumnDataType.Image: {
-        if (imageUrl) {
-          // We draw a placeholder thumbnail rect
-          const thumbSize = Math.min(h - 8, 28);
-          const thumbX = contentX;
-          const thumbY = midY - thumbSize / 2;
-          ctx.fillStyle = "#f3f4f6";
+        case ColumnDataType.MultiSelect: {
+          if (tags && tags.length > 0) {
+            let offsetX = contentX;
+            ctx.font = `11px ${theme.fontFamily}`;
+            for (const tag of tags) {
+              const color = getTagColor(tag);
+              const tw = ctx.measureText(tag).width;
+              const paddingH = 6;
+              const tagH = 18;
+              const tagW = tw + paddingH * 2;
+              const tagY = midY - tagH / 2;
+              if (offsetX + tagW > contentX + contentW) break;
+              ctx.fillStyle = color.bg;
+              ctx.beginPath();
+              roundRect(ctx, offsetX, tagY, tagW, tagH, 9);
+              ctx.fill();
+              ctx.fillStyle = color.text;
+              ctx.textBaseline = "middle";
+              ctx.fillText(tag, offsetX + paddingH, midY);
+              offsetX += tagW + 4;
+            }
+          }
+          break;
+        }
+
+        case ColumnDataType.AssignedTo: {
+          const avatarSize = 22;
+          const avatarX = contentX;
+          const name = avatarName || displayValue || "";
+          const initials = name
+            .split(" ")
+            .map((n) => n[0])
+            .join("")
+            .toUpperCase()
+            .slice(0, 2);
+          ctx.fillStyle = "#6366f1";
           ctx.beginPath();
-          roundRect(ctx, thumbX, thumbY, thumbSize, thumbSize, 4);
+          ctx.arc(avatarX + avatarSize / 2, midY, avatarSize / 2, 0, 2 * Math.PI);
           ctx.fill();
-          ctx.strokeStyle = "#d1d5db";
-          ctx.lineWidth = 1;
-          ctx.stroke();
-          // Image icon
-          ctx.fillStyle = "#9ca3af";
-          ctx.font = "12px sans-serif";
+          ctx.fillStyle = "#ffffff";
+          ctx.font = `bold 10px ${theme.fontFamily}`;
           ctx.textAlign = "center";
-          ctx.fillText("\u{1f5bc}", thumbX + thumbSize / 2, midY);
+          ctx.fillText(initials, avatarX + avatarSize / 2, midY + 1);
           ctx.textAlign = "left";
-        } else {
-          ctx.fillStyle = theme.textLight;
+          ctx.fillStyle = "#e4e4e7";
+          ctx.font = `13px ${theme.fontFamily}`;
+          ctx.fillText(name, avatarX + avatarSize + 6, midY, contentW - avatarSize - 6);
+          break;
+        }
+
+        default: {
+          // Text
+          ctx.fillStyle = "#e4e4e7";
           ctx.font = `13px ${theme.fontFamily}`;
           ctx.fillText(displayValue || "", contentX, midY, contentW);
+          break;
         }
-        break;
-      }
-
-      case ColumnDataType.AssignedTo: {
-        // Avatar circle + name
-        const avatarSize = 22;
-        const avatarX = contentX;
-        const avatarY = midY - avatarSize / 2;
-        const name = avatarName || displayValue || "";
-        const initials = name
-          .split(" ")
-          .map((n) => n[0])
-          .join("")
-          .toUpperCase()
-          .slice(0, 2);
-
-        ctx.fillStyle = "#6366f1";
-        ctx.beginPath();
-        ctx.arc(avatarX + avatarSize / 2, midY, avatarSize / 2, 0, 2 * Math.PI);
-        ctx.fill();
-
-        ctx.fillStyle = "#ffffff";
-        ctx.font = `bold 10px ${theme.fontFamily}`;
-        ctx.textAlign = "center";
-        ctx.fillText(initials, avatarX + avatarSize / 2, midY + 1);
-        ctx.textAlign = "left";
-
-        ctx.fillStyle = theme.textDark;
-        ctx.font = `13px ${theme.fontFamily}`;
-        ctx.fillText(name, avatarX + avatarSize + 6, midY, contentW - avatarSize - 6);
-        break;
-      }
-
-      default: {
-        // Text
-        ctx.fillStyle = theme.textDark;
-        ctx.font = `13px ${theme.fontFamily}`;
-        ctx.fillText(displayValue || "", contentX, midY, contentW);
-        break;
       }
     }
 
@@ -385,7 +404,7 @@ const openClayCellRenderer: CustomRenderer<OpenClayCell> = {
       const btnY = midY - btnSize / 2;
 
       ctx.globalAlpha = hoverAmount;
-      ctx.fillStyle = "#22c55e";
+      ctx.fillStyle = "#16a34a";
       ctx.beginPath();
       roundRect(ctx, btnX, btnY, btnSize, btnSize, 4);
       ctx.fill();
@@ -393,8 +412,8 @@ const openClayCellRenderer: CustomRenderer<OpenClayCell> = {
       // Play triangle
       ctx.fillStyle = "#ffffff";
       ctx.beginPath();
-      ctx.moveTo(btnX + 6, btnY + 4);
-      ctx.lineTo(btnX + 6, btnY + btnSize - 4);
+      ctx.moveTo(btnX + 7, btnY + 4);
+      ctx.lineTo(btnX + 7, btnY + btnSize - 4);
       ctx.lineTo(btnX + btnSize - 5, btnY + btnSize / 2);
       ctx.closePath();
       ctx.fill();
@@ -417,7 +436,6 @@ const openClayCellRenderer: CustomRenderer<OpenClayCell> = {
       const btnSize = 20;
       const btnX = bounds.width - btnSize - 6;
       if (posX >= btnX && posX <= btnX + btnSize) {
-        // Signal play button click — handled via onCellClicked
         return undefined;
       }
     }
@@ -442,6 +460,27 @@ function roundRect(
   ctx.quadraticCurveTo(x, y + h, x, y + h - r);
   ctx.lineTo(x, y + r);
   ctx.quadraticCurveTo(x, y, x + r, y);
+}
+
+// ── Helper: compute column progress for enrichment columns ──────────
+
+function computeColumnProgress(
+  columnId: string,
+  rows: RowData[]
+): { complete: number; running: number; error: number; empty: number; total: number; percentage: number } {
+  let complete = 0, running = 0, error = 0, empty = 0;
+  for (const row of rows) {
+    const cell = row.cells[columnId];
+    if (!cell || cell.status === CellStatusEnum.Empty) empty++;
+    else if (cell.status === CellStatusEnum.Complete) complete++;
+    else if (cell.status === CellStatusEnum.Running) running++;
+    else if (cell.status === CellStatusEnum.Error) error++;
+    else if (cell.status === CellStatusEnum.Pending) empty++;
+    else empty++;
+  }
+  const total = rows.length;
+  const percentage = total > 0 ? Math.round((complete / total) * 100) : 0;
+  return { complete, running, error, empty, total, percentage };
 }
 
 // ── Props ────────────────────────────────────────────────────────────
@@ -486,9 +525,19 @@ export function OpenClayDataGrid({
         col.columnType !== ColumnBehaviorType.Manual
           ? BEHAVIOR_TYPE_ICONS[col.columnType]
           : DATA_TYPE_ICONS[col.dataType];
+
+      const isAutomated = col.columnType !== ColumnBehaviorType.Manual;
+      let title = `${icon ?? ""} ${col.name}`;
+
+      // Add progress percentage to enrichment column headers
+      if (isAutomated) {
+        const progress = computeColumnProgress(col.id, rows);
+        title = `${icon ?? ""} ${col.name}  ${progress.percentage}%`;
+      }
+
       return {
         id: col.id,
-        title: `${icon ?? ""} ${col.name}`,
+        title,
         width: col.width,
         hasMenu: true,
         grow: 0,
@@ -502,12 +551,12 @@ export function OpenClayDataGrid({
       hasMenu: false,
       grow: 0,
       themeOverride: {
-        bgHeader: "#f9fafb",
-        textHeader: "#9ca3af",
+        bgHeader: "#18181b",
+        textHeader: "#52525b",
       },
     });
     return cols;
-  }, [columns]);
+  }, [columns, rows]);
 
   // ── getCellContent ─────────────────────────────────────────────
 
@@ -521,7 +570,7 @@ export function OpenClayDataGrid({
           displayData: "",
           allowOverlay: false,
           readonly: true,
-          themeOverride: { bgCell: "#f9fafb" },
+          themeOverride: { bgCell: "#18181b" },
         };
       }
 
@@ -555,7 +604,7 @@ export function OpenClayDataGrid({
           dataType: col.dataType,
           columnType: col.columnType,
           status,
-          tags: Array.isArray(value) ? value.map(String) : value ? [String(value)] : undefined,
+          tags: Array.isArray(value) ? value.map(String) : value && typeof value === "string" ? [String(value)] : undefined,
           checked: typeof value === "boolean" ? value : undefined,
           imageUrl: col.dataType === ColumnDataType.Image && typeof value === "string" ? value : undefined,
           avatarName: col.dataType === ColumnDataType.AssignedTo && typeof value === "string" ? value : undefined,
@@ -572,7 +621,7 @@ export function OpenClayDataGrid({
   const handleCellEdited = useCallback(
     (cell: Item, newValue: EditableGridCell) => {
       if (!onCellEdited) return;
-      if (cell[0] >= columns.length) return; // Ignore add-column column
+      if (cell[0] >= columns.length) return;
 
       let parsed: CellValue;
       if (newValue.kind === GridCellKind.Custom) {
@@ -597,7 +646,6 @@ export function OpenClayDataGrid({
   const handleHeaderClicked = useCallback(
     (colIdx: number) => {
       if (colIdx >= columns.length) {
-        // Clicked the "+" column
         onColumnAdded?.();
         return;
       }
@@ -659,6 +707,70 @@ export function OpenClayDataGrid({
     []
   );
 
+  // ── Draw header for enrichment columns with progress bar ──────
+
+  const drawHeader = useCallback(
+    (args: {
+      ctx: CanvasRenderingContext2D;
+      column: GridColumn;
+      columnIndex: number;
+      theme: unknown;
+      rect: Rectangle;
+      hoverAmount: number;
+      isSelected: boolean;
+      isHovered: boolean;
+      hasSelectedCell: boolean;
+      spriteManager: unknown;
+      menuBounds: Rectangle;
+    }, drawContent: () => void) => {
+      const { ctx, rect, columnIndex } = args;
+
+      // Let default header draw first
+      drawContent();
+
+      if (columnIndex >= columns.length) return;
+
+      const col = columns[columnIndex];
+      const isAutomated = col.columnType !== ColumnBehaviorType.Manual;
+
+      if (!isAutomated) return;
+
+      // Draw progress bar at the bottom of the header
+      const progress = computeColumnProgress(col.id, rows);
+      const barHeight = 3;
+      const barY = rect.y + rect.height - barHeight;
+      const totalWidth = rect.width;
+
+      if (progress.total > 0) {
+        // Background bar
+        ctx.fillStyle = "#27272a";
+        ctx.fillRect(rect.x, barY, totalWidth, barHeight);
+
+        // Complete segment (green)
+        const completeW = (progress.complete / progress.total) * totalWidth;
+        if (completeW > 0) {
+          ctx.fillStyle = "#16a34a";
+          ctx.fillRect(rect.x, barY, completeW, barHeight);
+        }
+
+        // Running segment (blue) after complete
+        const runningW = (progress.running / progress.total) * totalWidth;
+        if (runningW > 0) {
+          ctx.fillStyle = "#3b82f6";
+          ctx.fillRect(rect.x + completeW, barY, runningW, barHeight);
+        }
+
+        // Error segment (red)
+        const errorW = (progress.error / progress.total) * totalWidth;
+        if (errorW > 0) {
+          ctx.fillStyle = "#ef4444";
+          ctx.fillRect(rect.x + completeW + runningW, barY, errorW, barHeight);
+        }
+      }
+    },
+    [columns, rows]
+  );
+
   return (
     <div className="flex h-full w-full flex-col" ref={gridRef}>
       <div className="relative min-h-0 flex-1">
@@ -674,6 +786,7 @@ export function OpenClayDataGrid({
           gridSelection={selection}
           onGridSelectionChange={setSelection}
           customRenderers={customRenderers}
+          drawHeader={drawHeader}
           getCellsForSelection={true}
           trailingRowOptions={{
             sticky: false,
@@ -683,19 +796,23 @@ export function OpenClayDataGrid({
           rowMarkers="both"
           width="100%"
           height="100%"
-          headerHeight={36}
-          rowHeight={34}
+          headerHeight={38}
+          rowHeight={36}
           theme={{
             accentColor: "#6366f1",
-            accentLight: "#eef2ff",
-            bgHeader: "#ffffff",
-            bgHeaderHasFocus: "#f5f3ff",
-            bgHeaderHovered: "#f9fafb",
-            textDark: "#111827",
-            textHeader: "#374151",
-            textLight: "#9ca3af",
-            borderColor: "#e5e7eb",
-            horizontalBorderColor: "#f3f4f6",
+            accentLight: "#1e1b4b",
+            bgHeader: "#18181b",
+            bgHeaderHasFocus: "#27272a",
+            bgHeaderHovered: "#27272a",
+            bgCell: "#09090b",
+            bgCellMedium: "#18181b",
+            textDark: "#e4e4e7",
+            textHeader: "#a1a1aa",
+            textLight: "#52525b",
+            borderColor: "#27272a",
+            horizontalBorderColor: "#1c1c1f",
+            headerFontStyle: "600 12px",
+            baseFontStyle: "13px",
             fontFamily:
               'Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif',
           }}
@@ -712,18 +829,18 @@ export function OpenClayDataGrid({
           }}
         />
       </div>
-      {/* Add row button at the bottom */}
-      <div className="flex items-center border-t border-border bg-background px-2 py-1">
+      {/* Bottom bar */}
+      <div className="flex items-center border-t border-zinc-800 bg-zinc-950 px-2 py-1">
         <Button
           variant="ghost"
           size="sm"
-          className="gap-1 text-muted-foreground hover:text-foreground"
+          className="gap-1 text-zinc-500 hover:text-zinc-300"
           onClick={onRowAdded}
         >
           <Plus className="size-3.5" />
           Add row
         </Button>
-        <span className="ml-auto text-xs text-muted-foreground">
+        <span className="ml-auto text-xs text-zinc-500">
           {rows.length} {rows.length === 1 ? "row" : "rows"}
         </span>
       </div>
@@ -735,6 +852,12 @@ export function OpenClayDataGrid({
 
 function formatCellValue(value: CellValue, dataType: ColumnDataType): string {
   if (value === null || value === undefined) return "";
+
+  // If the value is an object (enrichment JSON), it was stored as rawValue
+  // and "value" should be the display string. But if value itself is an object, extract name.
+  if (typeof value === "object" && !Array.isArray(value)) {
+    return (value as Record<string, unknown>).name as string ?? JSON.stringify(value);
+  }
 
   switch (dataType) {
     case ColumnDataType.Number:

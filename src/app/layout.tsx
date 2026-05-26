@@ -32,6 +32,7 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col">
         <QueryProvider>{children}</QueryProvider>
+        <div id="portal" />
       </body>
     </html>
   );
