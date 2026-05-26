@@ -23,6 +23,8 @@ import type {
   CellData,
 } from "@/types/table";
 import { CellStatus, ColumnBehaviorType } from "@/types/table";
+import { ColumnHeaderMenu } from "@/components/table/column-header-menu";
+import { ColumnDataType } from "@/types/table";
 import { X, Play, Copy, ExternalLink } from "lucide-react";
 
 // ── Right panel modes ──────────────────────────────────────────────
@@ -324,6 +326,13 @@ export default function TablePage() {
     mode: "closed",
   });
 
+  // Column header context menu state
+  const [contextMenu, setContextMenu] = useState<{
+    columnId: string;
+    x: number;
+    y: number;
+  } | null>(null);
+
   // Sync local columns when fetched data arrives
   useEffect(() => {
     if (columns.length > 0) {
@@ -482,6 +491,198 @@ export default function TablePage() {
     console.log("Export CSV");
   }, []);
 
+  // ── Column header context menu ────────────────────────────────
+
+  const handleColumnHeaderContextMenu = useCallback(
+    (columnId: string, x: number, y: number) => {
+      setContextMenu({ columnId, x, y });
+    },
+    []
+  );
+
+  const handleContextMenuClose = useCallback(() => {
+    setContextMenu(null);
+  }, []);
+
+  const contextMenuColumn = useMemo(
+    () => displayColumns.find((c) => c.id === contextMenu?.columnId) ?? null,
+    [displayColumns, contextMenu?.columnId]
+  );
+
+  const handleContextMenuRename = useCallback(
+    (columnId: string) => {
+      console.log("Rename column:", columnId);
+      // TODO: show inline rename input
+    },
+    []
+  );
+
+  const handleContextMenuEdit = useCallback(
+    (columnId: string) => {
+      const col = displayColumns.find((c) => c.id === columnId);
+      if (col) {
+        setSelectedColumn(col);
+        setConfigPanelOpen(true);
+        setRightPanel({ mode: "column-config", selectedColumnId: col.id });
+      }
+    },
+    [displayColumns]
+  );
+
+  const handleContextMenuInsertLeft = useCallback(
+    (columnId: string, type: string, config?: any) => {
+      console.log("Insert column left of", columnId, "type:", type, config);
+      // TODO: insert column at position - 1
+      addColumn.mutate(
+        { tableId },
+        {
+          onSuccess: (newCol) => {
+            const targetCol = displayColumns.find((c) => c.id === columnId);
+            const insertPos = targetCol ? targetCol.position : 0;
+            setLocalColumns((prev) => {
+              const updated = prev.map((c) =>
+                c.position >= insertPos ? { ...c, position: c.position + 1 } : c
+              );
+              return [...updated, { ...newCol, position: insertPos }].sort(
+                (a, b) => a.position - b.position
+              );
+            });
+          },
+        }
+      );
+    },
+    [tableId, addColumn, displayColumns]
+  );
+
+  const handleContextMenuInsertRight = useCallback(
+    (columnId: string, type: string, config?: any) => {
+      console.log("Insert column right of", columnId, "type:", type, config);
+      // TODO: insert column at position + 1
+      addColumn.mutate(
+        { tableId },
+        {
+          onSuccess: (newCol) => {
+            const targetCol = displayColumns.find((c) => c.id === columnId);
+            const insertPos = targetCol ? targetCol.position + 1 : displayColumns.length;
+            setLocalColumns((prev) => {
+              const updated = prev.map((c) =>
+                c.position >= insertPos ? { ...c, position: c.position + 1 } : c
+              );
+              return [...updated, { ...newCol, position: insertPos }].sort(
+                (a, b) => a.position - b.position
+              );
+            });
+          },
+        }
+      );
+    },
+    [tableId, addColumn, displayColumns]
+  );
+
+  const handleContextMenuChangeColor = useCallback(
+    (columnId: string, color: string) => {
+      console.log("Change color of", columnId, "to", color);
+      // TODO: persist column color
+    },
+    []
+  );
+
+  const handleContextMenuChangeType = useCallback(
+    (columnId: string, type: ColumnDataType) => {
+      console.log("Change type of", columnId, "to", type);
+      setLocalColumns((prev) =>
+        prev.map((c) => (c.id === columnId ? { ...c, dataType: type } : c))
+      );
+    },
+    []
+  );
+
+  const handleContextMenuDuplicate = useCallback(
+    (columnId: string) => {
+      console.log("Duplicate column:", columnId);
+      const col = displayColumns.find((c) => c.id === columnId);
+      if (!col) return;
+      addColumn.mutate(
+        { tableId },
+        {
+          onSuccess: (newCol) => {
+            setLocalColumns((prev) => [
+              ...prev,
+              {
+                ...newCol,
+                name: `${col.name} (copy)`,
+                dataType: col.dataType,
+                columnType: col.columnType,
+                config: col.config,
+                position: prev.length,
+              },
+            ]);
+          },
+        }
+      );
+    },
+    [tableId, addColumn, displayColumns]
+  );
+
+  const handleContextMenuSort = useCallback(
+    (columnId: string, direction: "asc" | "desc") => {
+      setSorts([{ id: `sort-${columnId}`, columnId, direction }]);
+    },
+    []
+  );
+
+  const handleContextMenuDedupe = useCallback(
+    (columnId: string) => {
+      console.log("Dedupe on column:", columnId);
+      // TODO: dedupe rows based on this column
+    },
+    []
+  );
+
+  const handleContextMenuFilter = useCallback(
+    (columnId: string) => {
+      setIsFilterOpen(true);
+      setFilterGroup((prev) => ({
+        ...prev,
+        filters: [
+          ...prev.filters,
+          {
+            id: `filter-${Date.now()}`,
+            columnId,
+            operator: "is_not_empty" as const,
+            value: "",
+          },
+        ],
+      }));
+    },
+    []
+  );
+
+  const handleContextMenuPin = useCallback(
+    (columnId: string) => {
+      setLocalColumns((prev) =>
+        prev.map((c) => (c.id === columnId ? { ...c, pinned: !c.pinned } : c))
+      );
+    },
+    []
+  );
+
+  const handleContextMenuHide = useCallback(
+    (columnId: string) => {
+      setLocalColumns((prev) =>
+        prev.map((c) => (c.id === columnId ? { ...c, hidden: true } : c))
+      );
+    },
+    []
+  );
+
+  const handleContextMenuDelete = useCallback(
+    (columnId: string) => {
+      handleColumnDelete(columnId);
+    },
+    [handleColumnDelete]
+  );
+
   // ── Get selected cell data for right panel ────────────────────
 
   const selectedRow = useMemo(
@@ -562,6 +763,7 @@ export default function TablePage() {
             onHeaderClicked={handleHeaderClicked}
             onCellClicked={handleCellClicked}
             onRunCell={handleRunCell}
+            onColumnHeaderContextMenu={handleColumnHeaderContextMenu}
           />
         </div>
 
@@ -639,6 +841,29 @@ export default function TablePage() {
         onUpdate={handleColumnUpdate}
         onDelete={handleColumnDelete}
       />
+
+      {/* Column header right-click context menu */}
+      {contextMenu && contextMenuColumn && (
+        <ColumnHeaderMenu
+          column={contextMenuColumn}
+          position={{ x: contextMenu.x, y: contextMenu.y }}
+          isOpen={true}
+          onClose={handleContextMenuClose}
+          onRename={handleContextMenuRename}
+          onEdit={handleContextMenuEdit}
+          onInsertLeft={handleContextMenuInsertLeft}
+          onInsertRight={handleContextMenuInsertRight}
+          onChangeColor={handleContextMenuChangeColor}
+          onChangeType={handleContextMenuChangeType}
+          onDuplicate={handleContextMenuDuplicate}
+          onSort={handleContextMenuSort}
+          onDedupe={handleContextMenuDedupe}
+          onFilter={handleContextMenuFilter}
+          onPin={handleContextMenuPin}
+          onHide={handleContextMenuHide}
+          onDelete={handleContextMenuDelete}
+        />
+      )}
     </div>
   );
 }

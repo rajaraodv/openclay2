@@ -73,6 +73,20 @@ export interface ActionConfig {
 
 export type ColumnConfig = EnrichmentConfig | FormulaConfig | AIAgentConfig | ActionConfig | Record<string, unknown>;
 
+// ── Column value source (how a column derives its value) ────────────
+
+export interface ColumnValueSource {
+  type: 'reference' | 'formula' | 'static';
+  /** For reference: which column provides the data */
+  sourceColumnId?: string;
+  /** For reference: optional sub-field within the source column (e.g. enrichment field) */
+  sourceField?: string;
+  /** For formula: the expression */
+  expression?: string;
+  /** For static: a fixed value */
+  staticValue?: string;
+}
+
 // ── Column definition ────────────────────────────────────────────────
 
 export interface ColumnDef {
@@ -85,6 +99,8 @@ export interface ColumnDef {
   pinned: boolean;
   hidden: boolean;
   config: ColumnConfig;
+  /** How this column derives its value (reference to another column, formula, or static) */
+  valueSource?: ColumnValueSource;
   onlyRunIf?: string;
   autoRun?: boolean;
 }

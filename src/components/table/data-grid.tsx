@@ -495,6 +495,7 @@ export interface DataGridProps {
   onCellClicked?: (cell: Item) => void;
   onRunCell?: (rowId: string, columnId: string) => void;
   onHeaderClicked?: (columnIndex: number) => void;
+  onColumnHeaderContextMenu?: (columnId: string, x: number, y: number) => void;
 }
 
 // ── Component ────────────────────────────────────────────────────────
@@ -509,6 +510,7 @@ export function OpenClayDataGrid({
   onCellClicked,
   onRunCell,
   onHeaderClicked,
+  onColumnHeaderContextMenu,
 }: DataGridProps) {
   const [selection, setSelection] = useState<GridSelection>({
     columns: CompactSelection.empty(),
@@ -694,6 +696,21 @@ export function OpenClayDataGrid({
     [onColumnResized]
   );
 
+  // ── Header context menu (right-click) ───────────────────────────
+
+  const handleHeaderContextMenu = useCallback(
+    (colIdx: number, event: { bounds: Rectangle; localEventX: number; localEventY: number; preventDefault: () => void }) => {
+      event.preventDefault();
+      if (colIdx >= columns.length) return;
+      const col = columns[colIdx];
+      // Compute screen position from the bounds + local offset
+      const x = event.bounds.x + event.localEventX;
+      const y = event.bounds.y + event.localEventY;
+      onColumnHeaderContextMenu?.(col.id, x, y);
+    },
+    [columns, onColumnHeaderContextMenu]
+  );
+
   // ── Row append (trailing row) ──────────────────────────────────
 
   const handleRowAppended = useCallback(() => {
@@ -728,9 +745,8 @@ export function OpenClayDataGrid({
       // Let default header draw first
       drawContent();
 
-      if (columnIndex >= columns.length) return;
-
       const col = columns[columnIndex];
+      if (!col) return;
       const isAutomated = col.columnType !== ColumnBehaviorType.Manual;
 
       if (!isAutomated) return;
@@ -780,6 +796,7 @@ export function OpenClayDataGrid({
           rows={rows.length}
           onCellEdited={handleCellEdited}
           onHeaderClicked={handleHeaderClicked}
+          onHeaderContextMenu={handleHeaderContextMenu}
           onCellClicked={handleCellClicked}
           onColumnResize={handleColumnResize}
           onRowAppended={handleRowAppended}
