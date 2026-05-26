@@ -414,14 +414,21 @@ export default function TablePage() {
     [displayColumns, rows]
   );
 
-  // ── Header click: open column config panel ───────────────────
+  // ── Header click: show column context menu (same as right-click) ──
   const handleHeaderClicked = useCallback(
     (columnIndex: number) => {
       const col = displayColumns[columnIndex];
-      if (col) {
-        setSelectedColumn(col);
-        setConfigPanelOpen(true);
-        setRightPanel({ mode: "column-config", selectedColumnId: col.id });
+      if (!col) return;
+      const headerEl = document.querySelector(`[data-testid="data-grid-canvas"]`) ??
+        document.querySelector("canvas");
+      if (headerEl) {
+        const rect = headerEl.getBoundingClientRect();
+        const colWidths = displayColumns.slice(0, columnIndex).reduce((sum, c) => sum + (c.width || 200), 0);
+        const x = rect.left + colWidths + (col.width || 200) / 2 + 60;
+        const y = rect.top + 38;
+        setContextMenu({ columnId: col.id, x, y });
+      } else {
+        setContextMenu({ columnId: col.id, x: 300, y: 60 });
       }
     },
     [displayColumns]
@@ -511,14 +518,20 @@ export default function TablePage() {
 
   const handleContextMenuRename = useCallback(
     (columnId: string) => {
-      console.log("Rename column:", columnId);
-      // TODO: show inline rename input
+      setContextMenu(null);
+      const newName = prompt("Rename column:", displayColumns.find(c => c.id === columnId)?.name ?? "");
+      if (newName) {
+        setLocalColumns((prev) =>
+          prev.map((c) => (c.id === columnId ? { ...c, name: newName } : c))
+        );
+      }
     },
-    []
+    [displayColumns]
   );
 
   const handleContextMenuEdit = useCallback(
     (columnId: string) => {
+      setContextMenu(null);
       const col = displayColumns.find((c) => c.id === columnId);
       if (col) {
         setSelectedColumn(col);
@@ -581,15 +594,17 @@ export default function TablePage() {
 
   const handleContextMenuChangeColor = useCallback(
     (columnId: string, color: string) => {
-      console.log("Change color of", columnId, "to", color);
-      // TODO: persist column color
+      setContextMenu(null);
+      setLocalColumns((prev) =>
+        prev.map((c) => (c.id === columnId ? { ...c, config: { ...c.config, color } } : c))
+      );
     },
     []
   );
 
   const handleContextMenuChangeType = useCallback(
     (columnId: string, type: ColumnDataType) => {
-      console.log("Change type of", columnId, "to", type);
+      setContextMenu(null);
       setLocalColumns((prev) =>
         prev.map((c) => (c.id === columnId ? { ...c, dataType: type } : c))
       );
@@ -626,6 +641,7 @@ export default function TablePage() {
 
   const handleContextMenuSort = useCallback(
     (columnId: string, direction: "asc" | "desc") => {
+      setContextMenu(null);
       setSorts([{ id: `sort-${columnId}`, columnId, direction }]);
     },
     []
@@ -633,14 +649,15 @@ export default function TablePage() {
 
   const handleContextMenuDedupe = useCallback(
     (columnId: string) => {
-      console.log("Dedupe on column:", columnId);
-      // TODO: dedupe rows based on this column
+      setContextMenu(null);
+      alert(`Dedupe on column "${displayColumns.find(c => c.id === columnId)?.name}" — will remove duplicate rows. (API integration pending)`);
     },
-    []
+    [displayColumns]
   );
 
   const handleContextMenuFilter = useCallback(
     (columnId: string) => {
+      setContextMenu(null);
       setIsFilterOpen(true);
       setFilterGroup((prev) => ({
         ...prev,
@@ -660,6 +677,7 @@ export default function TablePage() {
 
   const handleContextMenuPin = useCallback(
     (columnId: string) => {
+      setContextMenu(null);
       setLocalColumns((prev) =>
         prev.map((c) => (c.id === columnId ? { ...c, pinned: !c.pinned } : c))
       );
@@ -669,6 +687,7 @@ export default function TablePage() {
 
   const handleContextMenuHide = useCallback(
     (columnId: string) => {
+      setContextMenu(null);
       setLocalColumns((prev) =>
         prev.map((c) => (c.id === columnId ? { ...c, hidden: true } : c))
       );
@@ -678,6 +697,7 @@ export default function TablePage() {
 
   const handleContextMenuDelete = useCallback(
     (columnId: string) => {
+      setContextMenu(null);
       handleColumnDelete(columnId);
     },
     [handleColumnDelete]
