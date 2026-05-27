@@ -62,7 +62,7 @@ const MOCK_COLUMNS: ColumnDef[] = [
     config: {},
     valueSource: {
       type: "reference" as const,
-      sourceColumnId: "col-enrich",
+      sourceColumnId: "col-enrich-company",
       sourceField: "linkedinUrl",
     },
   },
@@ -78,7 +78,7 @@ const MOCK_COLUMNS: ColumnDef[] = [
     config: {},
     valueSource: {
       type: "reference" as const,
-      sourceColumnId: "col-enrich",
+      sourceColumnId: "col-enrich-company",
       sourceField: "slug",
     },
   },

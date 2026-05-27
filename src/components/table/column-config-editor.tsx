@@ -545,7 +545,8 @@ export function ColumnConfigEditor({
   useEffect(() => {
     setName(column.name);
     setDataType(column.dataType);
-    setSegments(valueSourceToSegments(column.valueSource, allColumns));
+    const segs = valueSourceToSegments(column.valueSource, allColumns);
+    setSegments(segs);
     if (
       column.columnType === ColumnBehaviorType.Formula &&
       column.config &&
