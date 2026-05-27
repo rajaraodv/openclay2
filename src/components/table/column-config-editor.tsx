@@ -369,40 +369,82 @@ function ChipEditor({
 
   return (
     <div className="relative">
+      {/* Chip display area */}
       <div
         ref={editorRef}
-        contentEditable
-        suppressContentEditableWarning
-        onKeyDown={handleKeyDown}
-        onInput={handleInput}
+        tabIndex={0}
         onFocus={() => setIsFocused(true)}
         onBlur={() => setIsFocused(false)}
+        onKeyDown={handleKeyDown}
         className={cn(
-          "flex min-h-[72px] flex-wrap items-start gap-1 rounded-md border p-2.5 text-xs text-zinc-200 outline-none transition-colors",
+          "flex min-h-[72px] flex-wrap items-start gap-1.5 rounded-md border p-2.5 text-xs text-zinc-200 outline-none transition-colors cursor-text",
           "border-zinc-700 bg-zinc-900/50",
           isFocused && "ring-1 ring-indigo-500/50 border-indigo-500/30"
         )}
       >
-        {isEmpty && !isFocused && (
-          <span className="pointer-events-none text-zinc-600 italic select-none">
-            {placeholder ?? "No reference configured"}
-          </span>
-        )}
         {segments.map((seg, i) => {
           if (seg.type === "text") {
             return (
-              <React.Fragment key={`text-${i}`}>{seg.value}</React.Fragment>
+              <span key={`text-${i}`} className="inline-flex items-center text-zinc-300">{seg.value}</span>
             );
           }
           return (
-            <span key={`chip-${i}`} data-chip-index={i} contentEditable={false}>
-              <ColumnRefChip
-                ref_={seg.ref}
-                onRemove={() => handleRemoveChip(i)}
-              />
-            </span>
+            <ColumnRefChip
+              key={`chip-${i}`}
+              ref_={seg.ref}
+              onRemove={() => handleRemoveChip(i)}
+            />
           );
         })}
+        {isEmpty && (
+          <span className="text-zinc-600 italic select-none">
+            {placeholder ?? "No reference configured"}
+          </span>
+        )}
+        {/* Inline text input for typing after chips */}
+        <input
+          type="text"
+          className="flex-1 min-w-[60px] bg-transparent text-xs text-zinc-200 outline-none placeholder:text-zinc-600"
+          placeholder={segments.length > 0 ? "Type text or / to add column" : ""}
+          onKeyDown={(e) => {
+            if (e.key === "/") {
+              e.preventDefault();
+              const el = editorRef.current;
+              if (el) {
+                const rect = el.getBoundingClientRect();
+                onSlashTrigger({
+                  top: rect.bottom + 4,
+                  left: rect.left,
+                  width: rect.width,
+                });
+              }
+            } else if (e.key === "Backspace" && !(e.target as HTMLInputElement).value && segments.length > 0) {
+              handleRemoveChip(segments.length - 1);
+            }
+          }}
+          onChange={(e) => {
+            const val = e.target.value;
+            if (val.includes("/")) {
+              e.target.value = val.replace("/", "");
+              const el = editorRef.current;
+              if (el) {
+                const rect = el.getBoundingClientRect();
+                onSlashTrigger({
+                  top: rect.bottom + 4,
+                  left: rect.left,
+                  width: rect.width,
+                });
+              }
+            }
+          }}
+          onBlur={(e) => {
+            const val = e.target.value.trim();
+            if (val) {
+              onChange([...segments, { type: "text", value: val }]);
+              e.target.value = "";
+            }
+          }}
+        />
       </div>
 
       {/* Gear icon */}
