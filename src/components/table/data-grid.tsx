@@ -41,8 +41,8 @@ const DataEditor = dynamic(
 
 function DataGridSkeleton() {
   return (
-    <div className="flex h-full w-full items-center justify-center bg-zinc-950">
-      <div className="flex flex-col items-center gap-2 text-zinc-500">
+    <div className="flex h-full w-full items-center justify-center bg-white">
+      <div className="flex flex-col items-center gap-2 text-slate-400">
         <div className="h-6 w-6 animate-spin rounded-full border-2 border-current border-t-transparent" />
         <span className="text-sm">Loading spreadsheet...</span>
       </div>
@@ -186,38 +186,71 @@ const openClayCellRenderer: CustomRenderer<OpenClayCell> = {
       }
     }
 
-    let statusWidth = 0;
+    // ── Full-cell status rendering for non-complete, non-empty states ──
     if (isAutomated && status !== CellStatusEnum.Complete && status !== CellStatusEnum.Empty) {
-      const indicator = STATUS_INDICATOR[status] ?? STATUS_INDICATOR.empty;
+      ctx.textBaseline = "middle";
+
+      if (status === CellStatusEnum.Pending) {
+        // QUEUED: yellow-tinted background with "Queued..." text
+        ctx.fillStyle = "rgba(250, 204, 21, 0.08)";
+        ctx.fillRect(rect.x, rect.y, rect.width, rect.height);
+        ctx.fillStyle = "#ca8a04";
+        ctx.fillRect(rect.x, rect.y, 3, rect.height); // left accent bar
+        ctx.font = "500 12px Inter, sans-serif";
+        ctx.fillStyle = "#eab308";
+        ctx.fillText("⏳ Queued...", x + 4, midY);
+        ctx.restore();
+        return; // Don't render anything else
+      }
 
       if (status === CellStatusEnum.Running) {
+        // RUNNING: blue-tinted background with animated pulsing dot + "Running..." text
+        ctx.fillStyle = "rgba(59, 130, 246, 0.08)";
+        ctx.fillRect(rect.x, rect.y, rect.width, rect.height);
+        ctx.fillStyle = "#3b82f6";
+        ctx.fillRect(rect.x, rect.y, 3, rect.height); // left accent bar
+
         // Animated pulsing dot
-        const pulse = 0.4 + 0.6 * Math.abs(Math.sin(Date.now() / 400));
-        ctx.fillStyle = indicator.color;
+        const pulse = 0.4 + 0.6 * Math.abs(Math.sin(Date.now() / 300));
         ctx.globalAlpha = pulse;
+        ctx.fillStyle = "#3b82f6";
         ctx.beginPath();
-        ctx.arc(x + 6, midY, 4, 0, 2 * Math.PI);
+        ctx.arc(x + 10, midY, 4, 0, 2 * Math.PI);
         ctx.fill();
         ctx.globalAlpha = 1;
-        reqAF();
-        statusWidth = 16;
-      } else if (status === CellStatusEnum.Error) {
-        ctx.fillStyle = indicator.color;
-        ctx.font = "bold 11px sans-serif";
-        ctx.textBaseline = "middle";
-        ctx.fillText("✗", x + 1, midY);
-        statusWidth = 14;
-      } else if (status === CellStatusEnum.Pending) {
-        ctx.fillStyle = indicator.color;
-        ctx.font = "10px sans-serif";
-        ctx.textBaseline = "middle";
-        ctx.fillText("⏱", x + 1, midY);
-        statusWidth = 14;
+
+        ctx.font = "500 12px Inter, sans-serif";
+        ctx.fillStyle = "#60a5fa";
+        ctx.fillText("Running...", x + 20, midY);
+        reqAF(); // Keep animating
+        ctx.restore();
+        return;
+      }
+
+      if (status === CellStatusEnum.Error) {
+        // ERROR: red-tinted background with "Error" text
+        ctx.fillStyle = "rgba(239, 68, 68, 0.08)";
+        ctx.fillRect(rect.x, rect.y, rect.width, rect.height);
+        ctx.fillStyle = "#ef4444";
+        ctx.fillRect(rect.x, rect.y, 3, rect.height); // left accent bar
+        ctx.font = "500 12px Inter, sans-serif";
+        ctx.fillStyle = "#f87171";
+        ctx.fillText("✗ Error", x + 4, midY);
+        ctx.restore();
+        return;
+      }
+
+      if (status === CellStatusEnum.Skipped) {
+        ctx.font = "12px Inter, sans-serif";
+        ctx.fillStyle = "#94a3b8";
+        ctx.fillText("— Skipped", x + 4, midY);
+        ctx.restore();
+        return;
       }
     }
 
-    const contentX = x + statusWidth;
-    const contentW = w - statusWidth;
+    const contentX = x;
+    const contentW = w;
 
     ctx.textBaseline = "middle";
 
@@ -243,7 +276,7 @@ const openClayCellRenderer: CustomRenderer<OpenClayCell> = {
       ctx.textAlign = "left";
 
       // Draw company name
-      ctx.fillStyle = "#e4e4e7";
+      ctx.fillStyle = "#1e293b";
       ctx.font = `13px ${theme.fontFamily}`;
       ctx.fillText(displayValue, iconX + iconSize + 6, midY, contentW - iconSize - 8);
     } else {
@@ -268,7 +301,7 @@ const openClayCellRenderer: CustomRenderer<OpenClayCell> = {
         }
 
         case ColumnDataType.Number: {
-          ctx.fillStyle = "#e4e4e7";
+          ctx.fillStyle = "#1e293b";
           ctx.font = `13px ${theme.fontFamily}`;
           ctx.textAlign = "right";
           ctx.fillText(displayValue || "", contentX + contentW, midY, contentW);
@@ -277,7 +310,7 @@ const openClayCellRenderer: CustomRenderer<OpenClayCell> = {
         }
 
         case ColumnDataType.Currency: {
-          ctx.fillStyle = "#e4e4e7";
+          ctx.fillStyle = "#1e293b";
           ctx.font = `13px ${theme.fontFamily}`;
           ctx.textAlign = "right";
           const formatted = displayValue ? `$${displayValue}` : "";
@@ -376,7 +409,7 @@ const openClayCellRenderer: CustomRenderer<OpenClayCell> = {
           ctx.textAlign = "center";
           ctx.fillText(initials, avatarX + avatarSize / 2, midY + 1);
           ctx.textAlign = "left";
-          ctx.fillStyle = "#e4e4e7";
+          ctx.fillStyle = "#1e293b";
           ctx.font = `13px ${theme.fontFamily}`;
           ctx.fillText(name, avatarX + avatarSize + 6, midY, contentW - avatarSize - 6);
           break;
@@ -384,7 +417,7 @@ const openClayCellRenderer: CustomRenderer<OpenClayCell> = {
 
         default: {
           // Text
-          ctx.fillStyle = "#e4e4e7";
+          ctx.fillStyle = "#1e293b";
           ctx.font = `13px ${theme.fontFamily}`;
           ctx.fillText(displayValue || "", contentX, midY, contentW);
           break;
@@ -553,8 +586,8 @@ export function OpenClayDataGrid({
       hasMenu: false,
       grow: 0,
       themeOverride: {
-        bgHeader: "#18181b",
-        textHeader: "#52525b",
+        bgHeader: "#f8fafc",
+        textHeader: "#94a3b8",
       },
     });
     return cols;
@@ -807,7 +840,7 @@ export function OpenClayDataGrid({
   );
 
   return (
-    <div className="flex h-full w-full flex-col" ref={gridRef}>
+    <div className="flex h-full w-full flex-col bg-white" ref={gridRef}>
       <div className="relative min-h-0 flex-1">
         <DataEditor
           getCellContent={getCellContent}
@@ -836,18 +869,18 @@ export function OpenClayDataGrid({
           headerHeight={38}
           rowHeight={36}
           theme={{
-            accentColor: "#6366f1",
-            accentLight: "#1e1b4b",
-            bgHeader: "#18181b",
-            bgHeaderHasFocus: "#27272a",
-            bgHeaderHovered: "#27272a",
-            bgCell: "#09090b",
-            bgCellMedium: "#18181b",
-            textDark: "#e4e4e7",
-            textHeader: "#a1a1aa",
-            textLight: "#52525b",
-            borderColor: "#27272a",
-            horizontalBorderColor: "#1c1c1f",
+            accentColor: "#4f46e5",
+            accentLight: "#eef2ff",
+            bgHeader: "#f8fafc",
+            bgHeaderHasFocus: "#f1f5f9",
+            bgHeaderHovered: "#f1f5f9",
+            bgCell: "#ffffff",
+            bgCellMedium: "#f8fafc",
+            textDark: "#1e293b",
+            textHeader: "#475569",
+            textLight: "#94a3b8",
+            borderColor: "#e2e8f0",
+            horizontalBorderColor: "#f1f5f9",
             headerFontStyle: "600 12px",
             baseFontStyle: "13px",
             fontFamily:
@@ -867,11 +900,11 @@ export function OpenClayDataGrid({
         />
       </div>
       {/* Bottom bar */}
-      <div className="flex items-center border-t border-zinc-800 bg-zinc-950 px-2 py-1">
+      <div className="flex items-center border-t border-slate-200 bg-slate-50 px-2 py-1">
         <Button
           variant="ghost"
           size="sm"
-          className="gap-1 text-zinc-500 hover:text-zinc-300"
+          className="gap-1 text-slate-500 hover:text-slate-700"
           onClick={onRowAdded}
         >
           <Plus className="size-3.5" />

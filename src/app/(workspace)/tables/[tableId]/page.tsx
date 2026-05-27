@@ -540,8 +540,8 @@ export default function TablePage() {
         const executionDelay = 1200 + Math.random() * 1800; // 1.2-3s
 
         setTimeout(() => {
-          // Simulate random errors (10% chance)
-          const shouldError = Math.random() < 0.1;
+          // Simulate random errors (5% chance for demo)
+          const shouldError = Math.random() < 0.05;
           if (shouldError) {
             updateCellData(rowId, columnId, {
               status: CellStatus.Error,
@@ -912,7 +912,7 @@ export default function TablePage() {
   const isRightPanelOpen = rightPanel.mode !== "closed";
 
   return (
-    <div className="flex h-full flex-col overflow-hidden bg-zinc-950">
+    <div className="flex h-full flex-col overflow-hidden bg-white">
       {/* Toolbar */}
       <TableToolbar
         tableName={tableData?.name ?? "Untitled"}
@@ -967,7 +967,7 @@ export default function TablePage() {
 
         {/* Right panel */}
         {isRightPanelOpen && (
-          <div className="flex w-[40%] flex-col border-l border-zinc-800">
+          <div className="flex w-[40%] flex-col border-l border-slate-200 bg-white">
             {rightPanel.mode === "cell-detail" &&
               selectedRow &&
               selectedCol &&
