@@ -837,8 +837,12 @@ export function ColumnConfigEditor({
       column.columnType !== ColumnBehaviorType.Formula &&
       column.columnType !== ColumnBehaviorType.AIAgent);
 
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+
   return (
-    <div className="flex flex-col gap-0">
+    <div className="flex h-full flex-col">
+      <div className="flex-1 overflow-y-auto">
+      <div className="flex flex-col gap-0">
       {/* ── Header: Column name + type badge ──────────────────── */}
       <div className="flex items-start gap-2 px-4 pt-4 pb-3">
         <div className="flex flex-1 flex-col gap-1">
@@ -1328,6 +1332,45 @@ export function ColumnConfigEditor({
         >
           <Trash2 className="size-3.5" />
           Delete column
+        </Button>
+      </div>
+    </div>
+    </div>{/* end scroll area */}
+
+      {/* ── Sticky Save Footer ───────────────────────────────── */}
+      <div className="flex items-center justify-end gap-2 border-t border-zinc-800 bg-zinc-900 px-4 py-3">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            onSave(column.id, { valueSource: segments.length > 0 ? {
+              type: "reference",
+              sourceColumnId: segments.find(s => s.type === "ref")?.ref?.columnId ?? "",
+              sourceField: segments.find(s => s.type === "ref")?.ref?.field,
+              expression: segmentsToTemplate(segments),
+            } as ColumnValueSource : undefined });
+            setHasUnsavedChanges(false);
+          }}
+          className="border-zinc-700 text-zinc-300 hover:bg-zinc-800 text-xs"
+        >
+          Save and don&apos;t run enrichments
+        </Button>
+        <Button
+          size="sm"
+          onClick={() => {
+            onSave(column.id, { valueSource: segments.length > 0 ? {
+              type: "reference",
+              sourceColumnId: segments.find(s => s.type === "ref")?.ref?.columnId ?? "",
+              sourceField: segments.find(s => s.type === "ref")?.ref?.field,
+              expression: segmentsToTemplate(segments),
+            } as ColumnValueSource : undefined });
+            setHasUnsavedChanges(false);
+            // TODO: trigger enrichment run via API
+            alert("Column saved! In production, this would run enrichment on all rows.");
+          }}
+          className="bg-blue-600 text-white hover:bg-blue-700 text-xs"
+        >
+          Save
         </Button>
       </div>
     </div>
