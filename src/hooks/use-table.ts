@@ -60,6 +60,11 @@ const MOCK_COLUMNS: ColumnDef[] = [
     pinned: false,
     hidden: false,
     config: {},
+    valueSource: {
+      type: "reference" as const,
+      sourceColumnId: "col-enrich",
+      sourceField: "linkedinUrl",
+    },
   },
   {
     id: "col-slug",
@@ -71,6 +76,11 @@ const MOCK_COLUMNS: ColumnDef[] = [
     pinned: false,
     hidden: false,
     config: {},
+    valueSource: {
+      type: "reference" as const,
+      sourceColumnId: "col-enrich",
+      sourceField: "slug",
+    },
   },
   {
     id: "col-work-email",

@@ -6,7 +6,7 @@ import type { Item } from "@glideapps/glide-data-grid";
 import { OpenClayDataGrid } from "@/components/table/data-grid";
 import { TableToolbar } from "@/components/table/table-toolbar";
 import { FilterPanel } from "@/components/table/filter-panel";
-import { ColumnConfigPanel } from "@/components/table/column-config-panel";
+// Old slide-over panel removed — now using inline ColumnConfigEditor in right panel
 import {
   useTable,
   useRows,
@@ -317,7 +317,6 @@ export default function TablePage() {
 
   // ── UI state ──────────────────────────────────────────────────
   const [isFilterOpen, setIsFilterOpen] = useState(false);
-  const [configPanelOpen, setConfigPanelOpen] = useState(false);
   const [selectedColumn, setSelectedColumn] = useState<ColumnDef | null>(null);
   const [localColumns, setLocalColumns] = useState<ColumnDef[]>([]);
   const [autoRun, setAutoRun] = useState(true);
@@ -463,7 +462,6 @@ export default function TablePage() {
   const handleColumnDelete = useCallback(
     (columnId: string) => {
       setLocalColumns((prev) => prev.filter((c) => c.id !== columnId));
-      setConfigPanelOpen(false);
       setSelectedColumn(null);
       setRightPanel({ mode: "closed" });
     },
@@ -472,7 +470,6 @@ export default function TablePage() {
 
   const handleCloseRightPanel = useCallback(() => {
     setRightPanel({ mode: "closed" });
-    setConfigPanelOpen(false);
     setSelectedColumn(null);
   }, []);
 
@@ -536,7 +533,6 @@ export default function TablePage() {
       const col = displayColumns.find((c) => c.id === columnId);
       if (col) {
         setSelectedColumn(col);
-        setConfigPanelOpen(true);
         setRightPanel({ mode: "column-config", selectedColumnId: col.id });
       }
     },
@@ -826,15 +822,7 @@ export default function TablePage() {
         )}
       </div>
 
-      {/* Column config slide-over (full panel) */}
-      <ColumnConfigPanel
-        open={configPanelOpen}
-        onOpenChange={setConfigPanelOpen}
-        column={selectedColumn}
-        allColumns={displayColumns}
-        onUpdate={handleColumnUpdate}
-        onDelete={handleColumnDelete}
-      />
+      {/* Column config is now inline in the right panel above */}
 
       {/* Column header right-click context menu */}
       {contextMenu && contextMenuColumn && (
