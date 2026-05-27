@@ -656,11 +656,14 @@ export function OpenClayDataGrid({
     [columns.length, onColumnAdded, onHeaderClicked]
   );
 
+  // Track if a play button was just clicked (to prevent edit mode)
+  const playButtonClickedRef = useRef(false);
+
   // ── Cell click (detect play button) ────────────────────────────
 
   const handleCellClicked = useCallback(
     (cell: Item, event: { bounds: Rectangle; localEventX: number; localEventY: number }) => {
-      onCellClicked?.(cell);
+      playButtonClickedRef.current = false;
 
       if (cell[0] < columns.length && onRunCell) {
         const col = columns[cell[0]];
@@ -676,13 +679,29 @@ export function OpenClayDataGrid({
           if (event.localEventX >= btnX && event.localEventX <= btnX + btnSize) {
             const row = rows[cell[1]];
             if (row) {
+              playButtonClickedRef.current = true;
               onRunCell(row.id, col.id);
+              return; // Don't trigger cell click / open panel
             }
           }
         }
       }
+
+      onCellClicked?.(cell);
     },
     [columns, rows, onCellClicked, onRunCell]
+  );
+
+  // Prevent cell editing when play button was clicked
+  const handleCellActivated = useCallback(
+    (cell: Item): boolean => {
+      if (playButtonClickedRef.current) {
+        playButtonClickedRef.current = false;
+        return false; // Prevent edit mode
+      }
+      return true;
+    },
+    []
   );
 
   // ── Column resize ──────────────────────────────────────────────
@@ -798,6 +817,7 @@ export function OpenClayDataGrid({
           onHeaderClicked={handleHeaderClicked}
           onHeaderContextMenu={handleHeaderContextMenu}
           onCellClicked={handleCellClicked}
+          onCellActivated={handleCellActivated}
           onColumnResize={handleColumnResize}
           onRowAppended={handleRowAppended}
           gridSelection={selection}

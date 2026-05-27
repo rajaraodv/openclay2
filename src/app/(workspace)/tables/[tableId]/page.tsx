@@ -446,10 +446,101 @@ export default function TablePage() {
 
   const handleRunCell = useCallback(
     (rowId: string, columnId: string) => {
-      console.log("Run cell:", rowId, columnId);
-      // In production: POST /api/tables/${tableId}/run
+      const col = displayColumns.find((c) => c.id === columnId);
+      const row = rows.find((r) => r.id === rowId);
+      if (!col || !row) return;
+
+      // Set cell to "running" status immediately
+      setLocalRows((prev) =>
+        prev.map((r) =>
+          r.id === rowId
+            ? {
+                ...r,
+                cells: {
+                  ...r.cells,
+                  [columnId]: {
+                    ...(r.cells[columnId] ?? {}),
+                    status: CellStatus.Running,
+                  } as CellData,
+                },
+              }
+            : r
+        )
+      );
+
+      // Simulate enrichment after a delay
+      setTimeout(() => {
+        if (col.columnType === ColumnBehaviorType.Enrichment) {
+          // For enrichment columns: simulate API call using domain
+          const domainCell = row.cells["col-domain"];
+          const domain = domainCell?.value ? String(domainCell.value) : "unknown.com";
+          const companyName = domain.replace(/\.(com|co|io|app|dev|org|net)$/i, "")
+            .split(".")[0]
+            .replace(/-/g, " ")
+            .replace(/\b\w/g, (c) => c.toUpperCase());
+
+          const mockEnrichment = {
+            url: `https://www.linkedin.com/company/${domain.replace(/\.\w+$/, "")}`,
+            name: companyName,
+            size: ["11-50", "51-200", "201-500", "501-1000"][Math.floor(Math.random() * 4)],
+            slug: domain.replace(/\.\w+$/, "").toLowerCase(),
+            type: "Privately Held",
+            domain: domain,
+            orgId: Math.floor(Math.random() * 100000000),
+            country: "US",
+            industry: ["Software Development", "SaaS", "Technology", "AI/ML"][Math.floor(Math.random() * 4)],
+            description: `${companyName} provides innovative solutions in the technology space.`,
+            foundedYear: 2015 + Math.floor(Math.random() * 8),
+            linkedinUrl: `https://www.linkedin.com/company/${domain.replace(/\.\w+$/, "")}`,
+            employeeCount: 50 + Math.floor(Math.random() * 500),
+          };
+
+          setLocalRows((prev) =>
+            prev.map((r) =>
+              r.id === rowId
+                ? {
+                    ...r,
+                    cells: {
+                      ...r.cells,
+                      [columnId]: {
+                        value: companyName,
+                        rawValue: mockEnrichment,
+                        status: CellStatus.Complete,
+                        source: "mock-enrichment",
+                        confidence: 0.95,
+                      } as CellData,
+                    },
+                  }
+                : r
+            )
+          );
+        } else if (col.valueSource?.type === "reference") {
+          // For reference columns: extract from source column
+          const sourceCell = row.cells[col.valueSource.sourceColumnId ?? ""];
+          let newValue: string | null = null;
+          if (sourceCell?.rawValue && col.valueSource.sourceField) {
+            newValue = String((sourceCell.rawValue as Record<string, unknown>)[col.valueSource.sourceField] ?? "");
+          }
+          setLocalRows((prev) =>
+            prev.map((r) =>
+              r.id === rowId
+                ? {
+                    ...r,
+                    cells: {
+                      ...r.cells,
+                      [columnId]: {
+                        value: newValue,
+                        status: newValue ? CellStatus.Complete : CellStatus.Empty,
+                      } as CellData,
+                    },
+                  }
+                : r
+            )
+          );
+        }
+      }, 1000 + Math.random() * 1500); // 1-2.5 second delay to simulate API call
     },
-    []
+    [displayColumns, rows]
   );
 
   const handleTableNameChange = useCallback(
