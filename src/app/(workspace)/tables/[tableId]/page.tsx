@@ -444,13 +444,9 @@ export default function TablePage() {
     [displayColumns]
   );
 
-  const handleRunCell = useCallback(
-    (rowId: string, columnId: string) => {
-      const col = displayColumns.find((c) => c.id === columnId);
-      const row = rows.find((r) => r.id === rowId);
-      if (!col || !row) return;
-
-      // Set cell to "running" status immediately
+  // ── Helper: update a single cell's data ───────────────────────
+  const updateCellData = useCallback(
+    (rowId: string, columnId: string, cellUpdate: Partial<CellData>) => {
       setLocalRows((prev) =>
         prev.map((r) =>
           r.id === rowId
@@ -459,88 +455,172 @@ export default function TablePage() {
                 cells: {
                   ...r.cells,
                   [columnId]: {
-                    ...(r.cells[columnId] ?? {}),
-                    status: CellStatus.Running,
+                    ...(r.cells[columnId] ?? { value: null, rawValue: null }),
+                    ...cellUpdate,
                   } as CellData,
                 },
               }
             : r
         )
       );
-
-      // Simulate enrichment after a delay
-      setTimeout(() => {
-        if (col.columnType === ColumnBehaviorType.Enrichment) {
-          // For enrichment columns: simulate API call using domain
-          const domainCell = row.cells["col-domain"];
-          const domain = domainCell?.value ? String(domainCell.value) : "unknown.com";
-          const companyName = domain.replace(/\.(com|co|io|app|dev|org|net)$/i, "")
-            .split(".")[0]
-            .replace(/-/g, " ")
-            .replace(/\b\w/g, (c) => c.toUpperCase());
-
-          const mockEnrichment = {
-            url: `https://www.linkedin.com/company/${domain.replace(/\.\w+$/, "")}`,
-            name: companyName,
-            size: ["11-50", "51-200", "201-500", "501-1000"][Math.floor(Math.random() * 4)],
-            slug: domain.replace(/\.\w+$/, "").toLowerCase(),
-            type: "Privately Held",
-            domain: domain,
-            orgId: Math.floor(Math.random() * 100000000),
-            country: "US",
-            industry: ["Software Development", "SaaS", "Technology", "AI/ML"][Math.floor(Math.random() * 4)],
-            description: `${companyName} provides innovative solutions in the technology space.`,
-            foundedYear: 2015 + Math.floor(Math.random() * 8),
-            linkedinUrl: `https://www.linkedin.com/company/${domain.replace(/\.\w+$/, "")}`,
-            employeeCount: 50 + Math.floor(Math.random() * 500),
-          };
-
-          setLocalRows((prev) =>
-            prev.map((r) =>
-              r.id === rowId
-                ? {
-                    ...r,
-                    cells: {
-                      ...r.cells,
-                      [columnId]: {
-                        value: companyName,
-                        rawValue: mockEnrichment,
-                        status: CellStatus.Complete,
-                        source: "mock-enrichment",
-                        confidence: 0.95,
-                      } as CellData,
-                    },
-                  }
-                : r
-            )
-          );
-        } else if (col.valueSource?.type === "reference") {
-          // For reference columns: extract from source column
-          const sourceCell = row.cells[col.valueSource.sourceColumnId ?? ""];
-          let newValue: string | null = null;
-          if (sourceCell?.rawValue && col.valueSource.sourceField) {
-            newValue = String((sourceCell.rawValue as Record<string, unknown>)[col.valueSource.sourceField] ?? "");
-          }
-          setLocalRows((prev) =>
-            prev.map((r) =>
-              r.id === rowId
-                ? {
-                    ...r,
-                    cells: {
-                      ...r.cells,
-                      [columnId]: {
-                        value: newValue,
-                        status: newValue ? CellStatus.Complete : CellStatus.Empty,
-                      } as CellData,
-                    },
-                  }
-                : r
-            )
-          );
-        }
-      }, 1000 + Math.random() * 1500); // 1-2.5 second delay to simulate API call
     },
-    [displayColumns, rows]
+    []
+  );
+
+  // ── Find columns that depend on a given column ───────────────
+  const getDependentColumns = useCallback(
+    (sourceColumnId: string): ColumnDef[] => {
+      return displayColumns.filter(
+        (c) => c.valueSource?.sourceColumnId === sourceColumnId
+      );
+    },
+    [displayColumns]
+  );
+
+  // ── Run dependent columns for a row after source completes ───
+  const runDependentColumns = useCallback(
+    (rowId: string, sourceColumnId: string, enrichmentData: Record<string, unknown>) => {
+      const dependents = getDependentColumns(sourceColumnId);
+      if (dependents.length === 0) return;
+
+      // Queue all dependents
+      for (const depCol of dependents) {
+        updateCellData(rowId, depCol.id, { status: CellStatus.Pending });
+      }
+
+      // Run each dependent with a staggered delay
+      dependents.forEach((depCol, idx) => {
+        setTimeout(() => {
+          // Set to running
+          updateCellData(rowId, depCol.id, { status: CellStatus.Running });
+
+          // Extract value after short "processing" delay
+          setTimeout(() => {
+            const field = depCol.valueSource?.sourceField;
+            if (field && field in enrichmentData) {
+              const val = String(enrichmentData[field] ?? "");
+              updateCellData(rowId, depCol.id, {
+                value: val,
+                status: CellStatus.Complete,
+                source: `derived:${sourceColumnId}.${field}`,
+              });
+            } else {
+              updateCellData(rowId, depCol.id, {
+                value: null,
+                status: CellStatus.Error,
+                errorMessage: `Field "${field}" not found in enrichment response`,
+              });
+            }
+          }, 400 + Math.random() * 600);
+        }, (idx + 1) * 500); // Stagger: 500ms apart
+      });
+    },
+    [getDependentColumns, updateCellData]
+  );
+
+  // ── Main cell execution handler ──────────────────────────────
+  const handleRunCell = useCallback(
+    (rowId: string, columnId: string) => {
+      const col = displayColumns.find((c) => c.id === columnId);
+      if (!col) return;
+
+      // Get latest row data
+      const currentRows = localRows.length > 0 ? localRows : fetchedRows;
+      const row = currentRows.find((r) => r.id === rowId);
+      if (!row) return;
+
+      // ── Phase 1: Queued ──
+      updateCellData(rowId, columnId, { status: CellStatus.Pending });
+
+      // ── Phase 2: Running (after short queue delay) ──
+      setTimeout(() => {
+        updateCellData(rowId, columnId, { status: CellStatus.Running });
+
+        // ── Phase 3: Execute based on column type ──
+        const executionDelay = 1200 + Math.random() * 1800; // 1.2-3s
+
+        setTimeout(() => {
+          // Simulate random errors (10% chance)
+          const shouldError = Math.random() < 0.1;
+          if (shouldError) {
+            updateCellData(rowId, columnId, {
+              status: CellStatus.Error,
+              errorMessage: "API rate limit exceeded. Retry in 30 seconds.",
+            });
+            return;
+          }
+
+          if (col.columnType === ColumnBehaviorType.Enrichment) {
+            // Enrichment: use domain to generate company data
+            const domainCell = row.cells["col-domain"];
+            const domain = domainCell?.value ? String(domainCell.value) : "unknown.com";
+            const companyName = domain
+              .replace(/\.(com|co|io|app|dev|org|net)$/i, "")
+              .split(".")[0]
+              .replace(/-/g, " ")
+              .replace(/\b\w/g, (c) => c.toUpperCase());
+
+            const enrichmentResult: Record<string, unknown> = {
+              url: `https://www.linkedin.com/company/${domain.replace(/\.\w+$/, "")}`,
+              name: companyName,
+              size: `${(Math.floor(Math.random() * 10) + 1) * 50}-${(Math.floor(Math.random() * 10) + 2) * 50} employees`,
+              slug: domain.replace(/\.\w+$/, "").toLowerCase(),
+              type: "Privately Held",
+              domain,
+              orgId: Math.floor(Math.random() * 100000000),
+              country: "US",
+              industry: ["Software Development", "SaaS", "Technology", "AI/ML", "Fintech", "DevTools"][
+                Math.floor(Math.random() * 6)
+              ],
+              description: `${companyName} is a technology company building innovative solutions.`,
+              foundedYear: 2010 + Math.floor(Math.random() * 14),
+              linkedinUrl: `https://www.linkedin.com/company/${domain.replace(/\.\w+$/, "")}`,
+              employeeCount: 20 + Math.floor(Math.random() * 500),
+            };
+
+            updateCellData(rowId, columnId, {
+              value: companyName,
+              rawValue: enrichmentResult,
+              status: CellStatus.Complete,
+              source: "clearbit-enrichment",
+              confidence: 0.92 + Math.random() * 0.08,
+            });
+
+            // ── Phase 4: Run dependent columns ──
+            runDependentColumns(rowId, columnId, enrichmentResult);
+          } else if (col.valueSource?.type === "reference") {
+            // Reference: extract from source column
+            const sourceColumnId = col.valueSource.sourceColumnId ?? "";
+            const sourceField = col.valueSource.sourceField;
+            const latestRows = localRows.length > 0 ? localRows : fetchedRows;
+            const latestRow = latestRows.find((r) => r.id === rowId);
+            const sourceCell = latestRow?.cells[sourceColumnId];
+
+            if (sourceCell?.rawValue && sourceField) {
+              const rawObj = sourceCell.rawValue as Record<string, unknown>;
+              if (sourceField in rawObj) {
+                updateCellData(rowId, columnId, {
+                  value: String(rawObj[sourceField]),
+                  status: CellStatus.Complete,
+                  source: `derived:${sourceColumnId}.${sourceField}`,
+                });
+              } else {
+                updateCellData(rowId, columnId, {
+                  status: CellStatus.Error,
+                  errorMessage: `Field "${sourceField}" not found in source data`,
+                });
+              }
+            } else {
+              updateCellData(rowId, columnId, {
+                status: CellStatus.Error,
+                errorMessage: "Source column has no data. Run the source column first.",
+              });
+            }
+          }
+        }, executionDelay);
+      }, 300 + Math.random() * 400); // Queue → Running delay: 300-700ms
+    },
+    [displayColumns, localRows, fetchedRows, updateCellData, runDependentColumns]
   );
 
   const handleTableNameChange = useCallback(
