@@ -310,7 +310,7 @@ export default function TablePage() {
     [tableData?.columns]
   );
 
-  const rows: RowData[] = useMemo(
+  const fetchedRows: RowData[] = useMemo(
     () => rowsData?.rows ?? [],
     [rowsData?.rows]
   );
@@ -319,7 +319,17 @@ export default function TablePage() {
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [selectedColumn, setSelectedColumn] = useState<ColumnDef | null>(null);
   const [localColumns, setLocalColumns] = useState<ColumnDef[]>([]);
+  const [localRows, setLocalRows] = useState<RowData[]>([]);
   const [autoRun, setAutoRun] = useState(true);
+
+  // Sync local rows when fetched data arrives
+  useEffect(() => {
+    if (fetchedRows.length > 0) {
+      setLocalRows(fetchedRows);
+    }
+  }, [fetchedRows]);
+
+  const rows = localRows.length > 0 ? localRows : fetchedRows;
 
   // Right panel state
   const [rightPanel, setRightPanel] = useState<RightPanelState>({
@@ -807,10 +817,52 @@ export default function TablePage() {
                 allColumns={displayColumns}
                 rows={rows}
                 onSave={(columnId, updates) => {
+                  // Update column definition
                   setLocalColumns((prev) =>
                     prev.map((c) => (c.id === columnId ? { ...c, ...updates } : c))
                   );
                   setSelectedColumn((prev) => prev ? { ...prev, ...updates } : prev);
+
+                  // If valueSource changed, recompute cell values from enrichment data
+                  if (updates.valueSource && updates.valueSource.type === "reference") {
+                    const { sourceColumnId, sourceField, expression } = updates.valueSource;
+                    if (sourceColumnId) {
+                      setLocalRows((prevRows) =>
+                        prevRows.map((row) => {
+                          const sourceCell = row.cells[sourceColumnId];
+                          if (!sourceCell) return row;
+
+                          let newValue: string | null = null;
+
+                          if (sourceField && sourceCell.rawValue && typeof sourceCell.rawValue === "object") {
+                            // Extract sub-field from JSON
+                            newValue = String((sourceCell.rawValue as Record<string, unknown>)[sourceField] ?? "");
+                          } else if (!sourceField) {
+                            // Use the display value directly
+                            newValue = sourceCell.value != null ? String(sourceCell.value) : null;
+                          }
+
+                          // If there's a template expression with text, apply it
+                          if (expression && expression !== `{{${sourceColumnId}.${sourceField}}}` && newValue) {
+                            // Simple template: replace {{col.field}} with value
+                            newValue = expression.replace(/\{\{[^}]+\}\}/g, newValue);
+                          }
+
+                          return {
+                            ...row,
+                            cells: {
+                              ...row.cells,
+                              [columnId]: {
+                                ...(row.cells[columnId] ?? { rawValue: null, source: undefined, confidence: undefined, errorMessage: undefined }),
+                                value: newValue,
+                                status: newValue ? CellStatus.Complete : CellStatus.Empty,
+                              } as CellData,
+                            },
+                          };
+                        })
+                      );
+                    }
+                  }
                 }}
                 onDelete={(columnId) => {
                   handleColumnDelete(columnId);
